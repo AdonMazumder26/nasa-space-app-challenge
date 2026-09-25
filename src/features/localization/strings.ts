@@ -52,7 +52,7 @@ const en = {
   backHome: "Home",
   howToTitle: "How to look",
   howToBody:
-    "Drag to rotate a full turn. Scroll or pinch to zoom. Click a light to open its story. Search, the list, and the timeline reach the same objects without using the globe.",
+    "Drag to rotate a full turn. Scroll or pinch to zoom. Click a light to open its story. Objects and Timeline along the bottom open the list and the event sequence. Left and Right move between objects while a story is open.",
   reducedMotion: "Reduced motion is on. The globe will not spin by itself, and the camera will jump instead of glide.",
   textureCredit: "Globe textures",
   coordinateNote:
@@ -69,6 +69,8 @@ const en = {
   openList: "Object list",
   helpTitle: "Looking around",
   clearSelection: "Close story",
+  previousObject: "Previous object",
+  nextObject: "Next object",
   objectives: "Objectives",
   region: "Region",
   externalLink: "Opens in a new tab",
@@ -156,7 +158,7 @@ const bn: typeof en = {
   backHome: "প্রথম পাতা",
   howToTitle: "কীভাবে দেখবেন",
   howToBody:
-    "পুরো এক পাক ঘোরাতে টানুন। জুম করতে স্ক্রল বা চিমটি দিন। একটি আলোতে ক্লিক করলে তার গল্প খোলে। খোঁজ, তালিকা ও সময়রেখা গোলক ছাড়াই একই বস্তুতে পৌঁছায়।",
+    "পুরো এক পাক ঘোরাতে টানুন। জুম করতে স্ক্রল বা চিমটি দিন। একটি আলোতে ক্লিক করলে তার গল্প খোলে। নিচের বস্তু ও সময়রেখা তালিকা এবং ঘটনার ধারা খোলে। গল্প খোলা থাকলে বাম ও ডান তীর আগের ও পরের বস্তুতে নিয়ে যায়।",
   reducedMotion: "কম গতি চালু আছে। গোলক নিজে ঘুরবে না, এবং ক্যামেরা গড়িয়ে না গিয়ে লাফিয়ে যাবে।",
   textureCredit: "গোলকের মানচিত্র",
   coordinateNote:
@@ -173,6 +175,8 @@ const bn: typeof en = {
   openList: "বস্তুর তালিকা",
   helpTitle: "চারপাশ দেখা",
   clearSelection: "গল্প বন্ধ",
+  previousObject: "আগের বস্তু",
+  nextObject: "পরের বস্তু",
   objectives: "উদ্দেশ্য",
   region: "অঞ্চল",
   externalLink: "নতুন ট্যাবে খুলবে",

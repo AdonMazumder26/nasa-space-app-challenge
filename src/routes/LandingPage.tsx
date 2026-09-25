@@ -18,6 +18,8 @@ export function LandingPage() {
         objects={[]}
         selectedId={null}
         focusNonce={0}
+        emphasisNonce={0}
+        intro
         autoRotate
         reducedMotion={reduced}
         errorMessage={t.sceneError}
@@ -25,6 +27,7 @@ export function LandingPage() {
         clusterHint={t.clusterChoose}
         labelFor={(object) => object.name[lang]}
         onSelect={() => undefined}
+        onEmptyClick={() => undefined}
         sceneRef={sceneRef}
       />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_70%_40%,transparent_0%,rgba(9,11,16,0.2)_42%,rgba(9,11,16,0.88)_78%)]" />
@@ -36,7 +39,7 @@ export function LandingPage() {
           <motion.div
             initial={reduced ? false : { opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: reduced ? 0 : 0.5 }}
+            transition={{ duration: reduced ? 0 : 0.7, delay: reduced ? 0 : 0.85 }}
             className="max-w-xl"
           >
             <p className="text-[11px] tracking-[0.28em] text-[#e39a62] uppercase">{t.appKicker}</p>

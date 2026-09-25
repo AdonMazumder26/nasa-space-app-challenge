@@ -243,6 +243,6 @@ export const sources: Source[] = [
     url: "https://www.solarsystemscope.com/textures/",
     type: "asset credit",
     accessedDate: accessed,
-    notes: "Moon and Mars color maps are stored locally. License: CC BY 4.0. They are surface illustrations for the globe, not the coordinate source.",
+    notes: "The Moon color map is 8192 by 4096. The Mars color map is 2048 by 1024. Both are stored locally. License: CC BY 4.0. They are surface illustrations for the globe, not the coordinate source.",
   },
 ];

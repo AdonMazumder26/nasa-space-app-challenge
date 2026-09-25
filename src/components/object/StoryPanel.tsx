@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { LuX } from "react-icons/lu";
+import { LuChevronLeft, LuChevronRight, LuX } from "react-icons/lu";
 import { useEffect, useRef, useState } from "react";
 import { useI18n } from "../../features/localization/LanguageContext";
 import { formatCoordinate } from "../../lib/coordinates/latLon";
@@ -15,9 +15,11 @@ type Props = {
   mobile: boolean;
   reducedMotion: boolean;
   onClose: () => void;
+  onPrevious: (() => void) | null;
+  onNext: (() => void) | null;
 };
 
-export function StoryPanel({ object, missions, sources, mobile, reducedMotion, onClose }: Props) {
+export function StoryPanel({ object, missions, sources, mobile, reducedMotion, onClose, onPrevious, onNext }: Props) {
   const { t, lang } = useI18n();
   const closeRef = useRef<HTMLButtonElement>(null);
   const mission = missionById(missions, object.missionId);
@@ -31,28 +33,36 @@ export function StoryPanel({ object, missions, sources, mobile, reducedMotion, o
   const motionProps = reducedMotion
     ? {}
     : mobile
-      ? { initial: { y: 40, opacity: 0 }, animate: { y: 0, opacity: 1 } }
+      ? { initial: { y: 28, opacity: 0 }, animate: { y: 0, opacity: 1 } }
       : { initial: { x: 28, opacity: 0 }, animate: { x: 0, opacity: 1 } };
 
   return (
+    <div className={`pointer-events-none absolute inset-x-0 top-16 bottom-0 z-40 flex p-4 ${mobile ? "items-end pb-2" : "items-center justify-end pb-16"}`}>
     <motion.aside
       {...motionProps}
-      transition={{ duration: reducedMotion ? 0 : 0.32, ease: "easeOut" }}
+      key={object.id}
+      transition={{ duration: reducedMotion ? 0 : 0.45, delay: reducedMotion ? 0 : 0.5, ease: "easeOut" }}
       role="dialog"
       aria-labelledby="story-title"
       className={
         mobile
-          ? "fixed inset-x-0 bottom-0 z-40 max-h-[78dvh] overflow-auto rounded-t-3xl border border-white/10 bg-[#10131a] shadow-2xl"
-          : "absolute top-20 right-3 bottom-4 z-30 w-[min(400px,calc(100%-1.5rem))] overflow-auto rounded-3xl border border-white/10 bg-[#090b10]/82 shadow-2xl backdrop-blur-md"
+          ? "pointer-events-auto max-h-[56dvh] w-full overflow-auto rounded-t-3xl border border-white/20 bg-[#090b10]/72 shadow-2xl backdrop-blur-xl"
+          : "pointer-events-auto max-h-[min(68dvh,680px)] w-[min(400px,calc(100%-2rem))] overflow-auto rounded-3xl border border-white/20 bg-[#090b10]/48 shadow-2xl backdrop-blur-xl"
       }
     >
-      <div className="sticky top-0 flex items-start justify-between gap-3 border-b border-white/10 bg-[#10131a]/95 px-5 py-4 backdrop-blur">
-        <div>
+      <div className="sticky top-0 z-10 flex items-start gap-2 border-b border-white/10 bg-[#090b10]/45 px-4 py-3 backdrop-blur-md">
+        <button type="button" onClick={onPrevious ?? undefined} disabled={!onPrevious} aria-label={t.previousObject} className="rounded-full border border-white/15 p-2 disabled:opacity-30">
+          <LuChevronLeft />
+        </button>
+        <div className="min-w-0 flex-1">
           <p className="text-[11px] tracking-[0.18em] text-[#e39a62] uppercase">{t.typeLabels[object.type]}</p>
           <h2 id="story-title" className="font-display text-3xl leading-tight">
             {object.name[lang]}
           </h2>
         </div>
+        <button type="button" onClick={onNext ?? undefined} disabled={!onNext} aria-label={t.nextObject} className="rounded-full border border-white/15 p-2 disabled:opacity-30">
+          <LuChevronRight />
+        </button>
         <button ref={closeRef} type="button" onClick={onClose} aria-label={t.clearSelection} className="rounded-full border border-white/15 p-2">
           <LuX />
         </button>
@@ -120,6 +130,7 @@ export function StoryPanel({ object, missions, sources, mobile, reducedMotion, o
         </div>
       </div>
     </motion.aside>
+    </div>
   );
 }
 

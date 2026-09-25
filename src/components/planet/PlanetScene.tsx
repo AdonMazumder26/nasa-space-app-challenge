@@ -1,7 +1,7 @@
 import { OrbitControls, useProgress, useTexture, Html } from "@react-three/drei";
 import { StarField } from "./StarField";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Component, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Component, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { latLonToVector, MARKER_ALTITUDE } from "../../lib/coordinates/latLon";
@@ -31,6 +31,8 @@ type SceneProps = {
   objects: Artifact[];
   selectedId: string | null;
   focusNonce: number;
+  emphasisNonce: number;
+  intro: boolean;
   autoRotate: boolean;
   reducedMotion: boolean;
   errorMessage: string;
@@ -38,6 +40,7 @@ type SceneProps = {
   clusterHint: string;
   labelFor: (object: Artifact) => string;
   onSelect: (id: string) => void;
+  onEmptyClick: () => void;
   sceneRef: { current: SceneHandle | null };
 };
 
@@ -84,7 +87,7 @@ function FallbackSphere({ planet }: { planet: PlanetId }) {
 function TexturedPlanet({ planet }: { planet: PlanetId }) {
   const texture = useTexture(textureUrl[planet]);
   texture.colorSpace = THREE.SRGBColorSpace;
-  texture.anisotropy = 8;
+  texture.anisotropy = 16;
   return (
     <mesh>
       <sphereGeometry args={[1, 96, 96]} />
@@ -163,15 +166,21 @@ function CameraRig({
   planet,
   selected,
   focusNonce,
+  intro,
   autoRotate,
   reducedMotion,
+  skipEmpty,
+  onEmptyClick,
 }: {
   sceneRef: { current: SceneHandle | null };
   planet: PlanetId;
   selected: Artifact | null;
   focusNonce: number;
+  intro: boolean;
   autoRotate: boolean;
   reducedMotion: boolean;
+  skipEmpty: { current: boolean };
+  onEmptyClick: () => void;
 }) {
   const camera = useThree((state) => state.camera);
   const gl = useThree((state) => state.gl);
@@ -207,24 +216,46 @@ function CameraRig({
     };
   });
 
-  useEffect(() => {
-    camera.position.copy(DEFAULT_OFFSET);
+  useLayoutEffect(() => {
+    const home = DEFAULT_OFFSET.clone();
     controls.current?.target.set(0, 0, 0);
-    controls.current?.update();
+    if (intro && !reducedMotion) {
+      const from = home.clone().multiplyScalar(1.62);
+      camera.position.copy(from);
+      controls.current?.update();
+      focus.current = { from, to: home, started: performance.now() };
+      setFocusing(true);
+      return;
+    }
     focus.current = null;
     setFocusing(false);
-  }, [planet, camera]);
+    camera.position.copy(home);
+    controls.current?.update();
+  }, [planet, camera, intro, reducedMotion]);
 
-  useEffect(() => {
-    if (!selected) return;
+  useLayoutEffect(() => {
+    const home = DEFAULT_OFFSET.clone();
+    if (!selected) {
+      if (intro) return;
+      if (camera.position.distanceTo(home) < 0.08) return;
+      if (reducedMotion) {
+        camera.position.copy(home);
+        controls.current?.target.set(0, 0, 0);
+        controls.current?.update();
+        return;
+      }
+      focus.current = { from: camera.position.clone(), to: home, started: performance.now() };
+      setFocusing(true);
+      return;
+    }
     const direction = latLonToVector(selected.location.latitude, selected.location.longitude, 1);
     const length = Math.hypot(direction.x, direction.y, direction.z) || 1;
     const dir = new THREE.Vector3(direction.x, direction.y, direction.z).multiplyScalar(1 / length);
-    const distance = THREE.MathUtils.clamp(Math.min(camera.position.length(), 2.05), 1.72, 2.05);
+    const distance = 1.58;
     const pole = Math.abs(dir.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
     const side = new THREE.Vector3().crossVectors(dir, pole).normalize();
     const lift = new THREE.Vector3().crossVectors(side, dir).normalize();
-    const to = dir.multiplyScalar(distance).addScaledVector(lift, distance * 0.08);
+    const to = dir.multiplyScalar(distance).addScaledVector(lift, distance * 0.1);
     if (reducedMotion) {
       camera.position.copy(to);
       controls.current?.target.set(0, 0, 0);
@@ -233,16 +264,44 @@ function CameraRig({
     }
     focus.current = { from: camera.position.clone(), to, started: performance.now() };
     setFocusing(true);
-  }, [selected, focusNonce, reducedMotion, camera]);
+  }, [selected, focusNonce, reducedMotion, camera, intro]);
+
+  const emptyClick = useRef(onEmptyClick);
+  emptyClick.current = onEmptyClick;
 
   useEffect(() => {
     const cancel = () => {
       focus.current = null;
       setFocusing(false);
     };
-    gl.domElement.addEventListener("pointerdown", cancel);
-    return () => gl.domElement.removeEventListener("pointerdown", cancel);
-  }, [gl]);
+    let originX = 0;
+    let originY = 0;
+    let dragged = false;
+    const down = (event: PointerEvent) => {
+      originX = event.clientX;
+      originY = event.clientY;
+      dragged = false;
+    };
+    const move = (event: PointerEvent) => {
+      if (Math.hypot(event.clientX - originX, event.clientY - originY) > 8) {
+        dragged = true;
+        cancel();
+      }
+    };
+    const up = () => {
+      const skip = skipEmpty.current;
+      skipEmpty.current = false;
+      if (!dragged && !skip) emptyClick.current();
+    };
+    gl.domElement.addEventListener("pointerdown", down);
+    gl.domElement.addEventListener("pointermove", move);
+    gl.domElement.addEventListener("pointerup", up);
+    return () => {
+      gl.domElement.removeEventListener("pointerdown", down);
+      gl.domElement.removeEventListener("pointermove", move);
+      gl.domElement.removeEventListener("pointerup", up);
+    };
+  }, [gl, skipEmpty]);
 
   useFrame(() => {
     const anim = focus.current;
@@ -287,17 +346,27 @@ function Marker({
   object,
   name,
   selected,
+  emphasisNonce,
   reducedMotion,
+  skipEmpty,
   onSelect,
 }: {
   object: Artifact;
   name: string;
   selected: boolean;
+  emphasisNonce: number;
   reducedMotion: boolean;
+  skipEmpty: { current: boolean };
   onSelect: (id: string) => void;
 }) {
   const ref = useRef<THREE.Mesh>(null);
+  const scratch = useRef(new THREE.Vector3());
+  const burst = useRef(0);
   const [hot, setHot] = useState(false);
+
+  useEffect(() => {
+    if (selected && emphasisNonce > 0) burst.current = performance.now();
+  }, [selected, emphasisNonce]);
   const position = useMemo(() => {
     const vector = latLonToVector(object.location.latitude, object.location.longitude, MARKER_ALTITUDE);
     return new THREE.Vector3(vector.x, vector.y, vector.z);
@@ -307,7 +376,10 @@ function Marker({
   useFrame(({ camera, clock }) => {
     const mesh = ref.current;
     if (!mesh) return;
-    const scale = THREE.MathUtils.clamp(camera.position.length() * 0.015, 0.015, 0.05) * (selected ? 1.45 : 1);
+    const age = (performance.now() - burst.current) / 700;
+    const burstScale = !reducedMotion && age >= 0 && age < 1 ? 1 + Math.sin(age * Math.PI) * 0.85 : 1;
+    const distance = camera.position.distanceTo(mesh.getWorldPosition(scratch.current));
+    const scale = THREE.MathUtils.clamp(distance * 0.02, 0.008, 0.042) * (selected ? 1.35 : 1) * burstScale;
     mesh.scale.setScalar(scale);
     const material = mesh.material as THREE.MeshStandardMaterial;
     material.emissiveIntensity = selected && !reducedMotion ? 1.35 + Math.sin(clock.elapsedTime * 3.2) * 0.4 : selected ? 1.8 : 0.9;
@@ -317,8 +389,13 @@ function Marker({
     <group position={position}>
       <mesh
         ref={ref}
+        onPointerDown={(event) => {
+          event.stopPropagation();
+          skipEmpty.current = true;
+        }}
         onClick={(event) => {
           event.stopPropagation();
+          skipEmpty.current = true;
           onSelect(object.id);
         }}
         onPointerOver={(event) => {
@@ -393,14 +470,18 @@ function clusterMarkers(objects: Artifact[], camera: THREE.Camera, width: number
 function MarkerLayer({
   objects,
   selectedId,
+  emphasisNonce,
   reducedMotion,
+  skipEmpty,
   clusterHint,
   labelFor,
   onSelect,
 }: {
   objects: Artifact[];
   selectedId: string | null;
+  emphasisNonce: number;
   reducedMotion: boolean;
+  skipEmpty: { current: boolean };
   clusterHint: string;
   labelFor: (object: Artifact) => string;
   onSelect: (id: string) => void;
@@ -432,7 +513,9 @@ function MarkerLayer({
           object={object}
           name={labelFor(object)}
           selected={object.id === selectedId}
+          emphasisNonce={emphasisNonce}
           reducedMotion={reducedMotion}
+          skipEmpty={skipEmpty}
           onSelect={onSelect}
         />
       ))}
@@ -493,6 +576,7 @@ function SurfaceLoader({ label }: { label: string }) {
 
 function SceneContents(props: SceneProps) {
   const selected = props.objects.find((object) => object.id === props.selectedId) ?? null;
+  const skipEmpty = useRef(false);
   return (
     <>
       <color attach="background" args={["#070910"]} />
@@ -507,7 +591,9 @@ function SceneContents(props: SceneProps) {
       <MarkerLayer
         objects={props.objects}
         selectedId={props.selectedId}
+        emphasisNonce={props.emphasisNonce}
         reducedMotion={props.reducedMotion}
+        skipEmpty={skipEmpty}
         clusterHint={props.clusterHint}
         labelFor={props.labelFor}
         onSelect={props.onSelect}
@@ -517,8 +603,11 @@ function SceneContents(props: SceneProps) {
         planet={props.planet}
         selected={selected}
         focusNonce={props.focusNonce}
+        intro={props.intro}
         autoRotate={props.autoRotate}
         reducedMotion={props.reducedMotion}
+        skipEmpty={skipEmpty}
+        onEmptyClick={props.onEmptyClick}
       />
     </>
   );
