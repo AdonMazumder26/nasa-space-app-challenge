@@ -7,7 +7,8 @@ import { TEXTURE_LON_OFFSET_DEG } from "../lib/coordinates/latLon";
 export function AboutPage() {
   const { t, lang } = useI18n();
   const texture = catalog.sources.find((source) => source.id === "texture-credit");
-  const factual = catalog.sources.filter((source) => source.id !== "texture-credit");
+  const sky = catalog.sources.find((source) => source.id === "sky-credit");
+  const factual = catalog.sources.filter((source) => source.id !== "texture-credit" && source.id !== "sky-credit");
 
   return (
     <div className="min-h-dvh">
@@ -25,7 +26,19 @@ export function AboutPage() {
             {t.notLive} Texture longitude offset: {TEXTURE_LON_OFFSET_DEG}°.
           </p>
           <p>{t.offlineNote}</p>
+          <p>{t.skyNote}</p>
         </section>
+        {sky && (
+          <section className="mt-8">
+            <h2 className="font-display text-2xl">{t.skyCredit}</h2>
+            <p className="mt-2 text-sm leading-6">
+              <a className="text-[#e7d3b0] underline" href={sky.url} target="_blank" rel="noreferrer noopener">
+                {sky.publisher}
+              </a>
+              . {sky.notes} {t.externalLink}.
+            </p>
+          </section>
+        )}
         {texture && (
           <section className="mt-8">
             <h2 className="font-display text-2xl">{t.textureCredit}</h2>

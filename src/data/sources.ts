@@ -228,6 +228,15 @@ export const sources: Source[] = [
     notes: "Annotated orbital image. NASA identifies the marked feature as Beagle 2.",
   },
   {
+    id: "sky-credit",
+    title: "Bright-star celestial sphere",
+    publisher: "ESA Hipparcos, HYG compilation by David Nash",
+    url: "https://www.astronexus.com/hyg",
+    type: "asset credit",
+    accessedDate: accessed,
+    notes: "Stars with visual magnitude 5.5 or brighter. The Milky Way band is drawn along the galactic equator. It is a celestial sphere, not the sky from a landing site.",
+  },
+  {
     id: "texture-credit",
     title: "Solar System Scope planet textures",
     publisher: "Solar System Scope",

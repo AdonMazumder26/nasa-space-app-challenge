@@ -23,4 +23,4 @@ Import the repository on [Vercel](https://vercel.com). The Vite preset uses `npm
 
 ## Notes
 
-Moon and Mars color maps are stored in `public/textures` and credited to [Solar System Scope](https://www.solarsystemscope.com/textures/) (CC BY 4.0). Object coordinates come from the agency sources linked inside the app. Active rovers are marked at their documented landing sites, not a live position. Photographs in the Apollo 11, Mars lander, and rover stories are NASA images stored in `public/images`, with the credit and source shown beside each picture.
+Moon and Mars color maps are stored in `public/textures` and credited to [Solar System Scope](https://www.solarsystemscope.com/textures/) (CC BY 4.0). Object coordinates come from the agency sources linked inside the app. Active rovers are marked at their documented landing sites, not a live position. Photographs in the Apollo 11, Mars lander, and rover stories are NASA images stored in `public/images`, with the credit and source shown beside each picture. The night sky is a celestial sphere of Hipparcos stars from the HYG compilation, credited in the app.

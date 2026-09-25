@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useI18n } from "../../features/localization/LanguageContext";
 import { formatCoordinate } from "../../lib/coordinates/latLon";
 import { missionById } from "../../lib/filtering";
-import { formatDisplayDate } from "../../lib/presentation";
+import { formatDisplayDate, recordedSpanDays } from "../../lib/presentation";
 import type { Artifact, CatalogImage, Mission, Source } from "../../types/catalog";
 import type { Lang } from "../../features/localization/strings";
 
@@ -96,6 +96,7 @@ export function StoryPanel({ object, missions, sources, mobile, reducedMotion, o
             {mission.endDate ? ` · ${t.ended} ${formatDisplayDate(mission.endDate, lang)}` : ""}
           </p>
         )}
+        {mission && <AtAGlance mission={mission} active={object.status === "active"} lang={lang} />}
         <Section title={t.whatIsIt} body={story.whatIsIt} />
         <Section title={t.whatHappened} body={story.whatHappened} />
         <Section title={t.whyLeft} body={story.whyLeft} />
@@ -145,6 +146,25 @@ function StoryImage({ image, lang, label, source }: { image: CatalogImage; lang:
         )}
       </figcaption>
     </figure>
+  );
+}
+
+function AtAGlance({ mission, active, lang }: { mission: Mission; active: boolean; lang: Lang }) {
+  const { t } = useI18n();
+  const days = recordedSpanDays(mission.arrivalDate, mission.endDate);
+  const still = active && !mission.endDate;
+  if (!mission.arrivalDate && !still && days === null) return null;
+  return (
+    <section className="rounded-2xl border border-white/10 bg-black/25 px-3 py-3">
+      <h3 className="text-[11px] tracking-[0.16em] text-[#e39a62] uppercase">{t.atAGlance}</h3>
+      <p className="mt-1 text-sm text-[#f3efe6]">
+        {still
+          ? t.stillOperating
+          : days !== null
+            ? `${days.toLocaleString(lang === "bn" ? "bn-BD" : "en-GB")} ${t.recordedSpan}`
+            : t.unknownDate}
+      </p>
+    </section>
   );
 }
 

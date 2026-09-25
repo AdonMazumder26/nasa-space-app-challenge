@@ -58,6 +58,12 @@ const en = {
   coordinateNote:
     "Markers use one shared latitude/longitude conversion. Longitudes are east-positive, from −180° to 180°. A published west longitude is stored with the opposite sign.",
   photograph: "Photograph",
+  atAGlance: "At a glance",
+  stillOperating: "Still operating. No end date is recorded.",
+  recordedSpan: "days between the recorded arrival and the recorded end",
+  skyCredit: "Night sky",
+  skyNote:
+    "The background is a celestial sphere. Stars are those brighter than visual magnitude 5.5 in the HYG compilation of the Hipparcos catalog. The pale band follows the galactic equator. This is not the sky as seen from a landing site on a particular day.",
   offlineNote: "The catalog, interface, globe maps, and object photographs are stored with the app. Source links still need a network.",
   notLive: "Active rovers are marked at their documented landing sites. This app does not follow them live.",
   openList: "Object list",
@@ -156,6 +162,12 @@ const bn: typeof en = {
   coordinateNote:
     "চিহ্নগুলো একই অক্ষাংশ/দ্রাঘিমা রূপান্তর ব্যবহার করে। দ্রাঘিমা পূর্ব-ধনাত্মক, −১৮০° থেকে ১৮০°। প্রকাশিত পশ্চিম দ্রাঘিমা উল্টো চিহ্নে রাখা।",
   photograph: "আলোকচিত্র",
+  atAGlance: "এক নজরে",
+  stillOperating: "এখনও চলছে। সমাপ্তির তারিখ লিপিবদ্ধ নয়।",
+  recordedSpan: "দিন, নথিভুক্ত পৌঁছানো ও সমাপ্তির মধ্যে",
+  skyCredit: "রাতের আকাশ",
+  skyNote:
+    "পেছনের আকাশ একটি খ-গোলক। হিপ্পারকোস তালিকার এইচওয়াইজি সংকলনে দৃশ্যমান ৫.৫ মাত্রার চেয়ে উজ্জ্বল তারাগুলো আছে। ফিকে বলয়টি ছায়াপথের বিষুবরেখা। এটি কোনো অবতরণস্থল থেকে কোনো নির্দিষ্ট দিনের আকাশ নয়।",
   offlineNote: "তালিকা, ইন্টারফেস, গোলকের মানচিত্র ও বস্তুর আলোকচিত্র অ্যাপের সঙ্গে আছে। উৎসের লিঙ্কে নেটওয়ার্ক লাগে।",
   notLive: "সক্রিয় রোভার তাদের নথিভুক্ত অবতরণস্থলে চিহ্নিত। এই অ্যাপ তাদের তাৎক্ষণিক অনুসরণ করে না।",
   openList: "বস্তুর তালিকা",

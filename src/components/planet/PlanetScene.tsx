@@ -1,4 +1,5 @@
-import { OrbitControls, Stars, useProgress, useTexture, Html } from "@react-three/drei";
+import { OrbitControls, useProgress, useTexture, Html } from "@react-three/drei";
+import { StarField } from "./StarField";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Component, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import * as THREE from "three";
@@ -122,8 +123,8 @@ function MarsAir() {
           uniform vec3 glow;
           void main() {
             vec3 viewDir = normalize(cameraPosition - vWorld);
-            float fresnel = pow(1.0 - abs(dot(viewDir, normalize(vNormal))), 2.4);
-            gl_FragColor = vec4(glow, fresnel * 0.45);
+            float fresnel = pow(1.0 - abs(dot(viewDir, normalize(vNormal))), 1.7);
+            gl_FragColor = vec4(glow, fresnel * 0.62);
           }
         `,
       }),
@@ -133,9 +134,15 @@ function MarsAir() {
   useEffect(() => () => material.dispose(), [material]);
 
   return (
-    <mesh scale={1.065} material={material}>
-      <sphereGeometry args={[1, 48, 48]} />
-    </mesh>
+    <>
+      <mesh scale={1.045} material={material}>
+        <sphereGeometry args={[1, 48, 48]} />
+      </mesh>
+      <mesh scale={1.11}>
+        <sphereGeometry args={[1, 40, 40]} />
+        <meshBasicMaterial color="#c46a52" transparent opacity={0.045} side={THREE.BackSide} depthWrite={false} />
+      </mesh>
+    </>
   );
 }
 
@@ -212,8 +219,12 @@ function CameraRig({
     if (!selected) return;
     const direction = latLonToVector(selected.location.latitude, selected.location.longitude, 1);
     const length = Math.hypot(direction.x, direction.y, direction.z) || 1;
-    const distance = THREE.MathUtils.clamp(camera.position.length(), MIN_DISTANCE, MAX_DISTANCE);
-    const to = new THREE.Vector3(direction.x, direction.y, direction.z).multiplyScalar(distance / length);
+    const dir = new THREE.Vector3(direction.x, direction.y, direction.z).multiplyScalar(1 / length);
+    const distance = THREE.MathUtils.clamp(Math.min(camera.position.length(), 2.05), 1.72, 2.05);
+    const pole = Math.abs(dir.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+    const side = new THREE.Vector3().crossVectors(dir, pole).normalize();
+    const lift = new THREE.Vector3().crossVectors(side, dir).normalize();
+    const to = dir.multiplyScalar(distance).addScaledVector(lift, distance * 0.08);
     if (reducedMotion) {
       camera.position.copy(to);
       controls.current?.target.set(0, 0, 0);
@@ -236,7 +247,7 @@ function CameraRig({
   useFrame(() => {
     const anim = focus.current;
     if (!anim || !controls.current) return;
-    const t = Math.min(1, (performance.now() - anim.started) / 880);
+    const t = Math.min(1, (performance.now() - anim.started) / 1100);
     const eased = t < 0.5 ? 2 * t * t : 1 - ((-2 * t + 2) ** 2) / 2;
     camera.position.lerpVectors(anim.from, anim.to, eased);
     controls.current.target.set(0, 0, 0);
@@ -274,16 +285,19 @@ function CameraRig({
 
 function Marker({
   object,
+  name,
   selected,
   reducedMotion,
   onSelect,
 }: {
   object: Artifact;
+  name: string;
   selected: boolean;
   reducedMotion: boolean;
   onSelect: (id: string) => void;
 }) {
   const ref = useRef<THREE.Mesh>(null);
+  const [hot, setHot] = useState(false);
   const position = useMemo(() => {
     const vector = latLonToVector(object.location.latitude, object.location.longitude, MARKER_ALTITUDE);
     return new THREE.Vector3(vector.x, vector.y, vector.z);
@@ -300,24 +314,32 @@ function Marker({
   });
 
   return (
-    <mesh
-      ref={ref}
-      position={position}
-      onClick={(event) => {
-        event.stopPropagation();
-        onSelect(object.id);
-      }}
-      onPointerOver={(event) => {
-        event.stopPropagation();
-        document.body.style.cursor = "pointer";
-      }}
-      onPointerOut={() => {
-        document.body.style.cursor = "";
-      }}
-    >
-      <sphereGeometry args={[1, 16, 16]} />
-      <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.9} toneMapped={false} />
-    </mesh>
+    <group position={position}>
+      <mesh
+        ref={ref}
+        onClick={(event) => {
+          event.stopPropagation();
+          onSelect(object.id);
+        }}
+        onPointerOver={(event) => {
+          event.stopPropagation();
+          document.body.style.cursor = "pointer";
+          setHot(true);
+        }}
+        onPointerOut={() => {
+          document.body.style.cursor = "";
+          setHot(false);
+        }}
+      >
+        <sphereGeometry args={[1, 16, 16]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.9} toneMapped={false} />
+      </mesh>
+      {hot && !selected && (
+        <Html position={[0, 0.06, 0]} center zIndexRange={[12, 0]} style={{ pointerEvents: "none" }}>
+          <span className="block max-w-40 truncate rounded-full border border-white/15 bg-black/80 px-2 py-1 text-[11px] text-[#f3efe6]">{name}</span>
+        </Html>
+      )}
+    </group>
   );
 }
 
@@ -408,6 +430,7 @@ function MarkerLayer({
         <Marker
           key={object.id}
           object={object}
+          name={labelFor(object)}
           selected={object.id === selectedId}
           reducedMotion={reducedMotion}
           onSelect={onSelect}
@@ -472,8 +495,8 @@ function SceneContents(props: SceneProps) {
   const selected = props.objects.find((object) => object.id === props.selectedId) ?? null;
   return (
     <>
-      <color attach="background" args={["#090b10"]} />
-      <Stars radius={90} depth={40} count={reducedCount(props.reducedMotion)} factor={3} fade speed={props.reducedMotion ? 0 : 0.25} />
+      <color attach="background" args={["#070910"]} />
+      <StarField />
       <Lights planet={props.planet} />
       <TextureBoundary key={props.planet} fallback={<FallbackSphere planet={props.planet} />}>
         <Suspense fallback={<FallbackSphere planet={props.planet} />}>
@@ -501,16 +524,12 @@ function SceneContents(props: SceneProps) {
   );
 }
 
-function reducedCount(reduced: boolean): number {
-  return reduced ? 900 : 2200;
-}
-
 export function PlanetViewport(props: SceneProps) {
   return (
     <WebglBoundary message={props.errorMessage}>
       <div className="absolute inset-0">
         <Canvas
-          camera={{ position: [DEFAULT_OFFSET.x, DEFAULT_OFFSET.y, DEFAULT_OFFSET.z], fov: 42, near: 0.05, far: 200 }}
+          camera={{ position: [DEFAULT_OFFSET.x, DEFAULT_OFFSET.y, DEFAULT_OFFSET.z], fov: 42, near: 0.05, far: 280 }}
           dpr={[1, 1.75]}
           gl={{ antialias: true, alpha: false, powerPreference: "high-performance" }}
           onCreated={({ gl }) => {

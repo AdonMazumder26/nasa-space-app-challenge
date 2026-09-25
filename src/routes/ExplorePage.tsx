@@ -34,7 +34,19 @@ function Explorer({ planet }: { planet: PlanetId }) {
   const [listOpen, setListOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [focusNonce, setFocusNonce] = useState(0);
+  const [holdSpin, setHoldSpin] = useState(false);
   const selectedId = searchParams.get("object");
+
+  useEffect(() => {
+    if (!selectedId) {
+      setHoldSpin(false);
+      return;
+    }
+    setHoldSpin(true);
+    if (reduced) return;
+    const timer = window.setTimeout(() => setHoldSpin(false), 8000);
+    return () => window.clearTimeout(timer);
+  }, [selectedId, reduced]);
 
   useEffect(() => {
     if (reduced) setAutoRotate(false);
@@ -101,7 +113,7 @@ function Explorer({ planet }: { planet: PlanetId }) {
           objects={markers}
           selectedId={selected?.id ?? null}
           focusNonce={focusNonce}
-          autoRotate={autoRotate}
+          autoRotate={autoRotate && !holdSpin}
           reducedMotion={reduced}
           errorMessage={t.sceneError}
           loadingLabel={t.loadingSurface}

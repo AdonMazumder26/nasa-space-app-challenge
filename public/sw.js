@@ -1,4 +1,4 @@
-const CACHE = "abandoned-v1";
+const CACHE = "abandoned-v2";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());
@@ -16,6 +16,7 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const request = event.request;
   if (request.method !== "GET") return;
+  if (request.destination === "image") return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith("/@") || url.pathname.startsWith("/src/") || url.pathname.includes("node_modules")) return;
@@ -23,7 +24,8 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(
     fetch(request)
       .then((response) => {
-        if (response && response.ok) {
+        const type = response.headers.get("content-type") || "";
+        if (response && response.ok && (request.mode === "navigate" || !type.includes("text/html"))) {
           const copy = response.clone();
           caches.open(CACHE).then((cache) => cache.put(request, copy));
         }

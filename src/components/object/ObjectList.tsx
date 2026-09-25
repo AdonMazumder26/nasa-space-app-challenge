@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { useI18n } from "../../features/localization/LanguageContext";
 import { missionById } from "../../lib/filtering";
 import { typeColor } from "../../lib/presentation";
@@ -20,6 +21,13 @@ type Props = {
 
 export function ObjectList({ planet, objects, total, missions, filters, selectedId, yearBounds, onFilters, onSelect }: Props) {
   const { t, lang } = useI18n();
+  const listRef = useRef<HTMLUListElement>(null);
+
+  useEffect(() => {
+    if (!selectedId || !listRef.current) return;
+    const node = listRef.current.querySelector(`[data-object-id="${CSS.escape(selectedId)}"]`);
+    node?.scrollIntoView({ block: "nearest" });
+  }, [selectedId]);
   const planetMissions = missions.filter((mission) => mission.planet === planet);
   const filtersOn = filters.types.length > 0 || filters.statuses.length > 0 || filters.missionId !== null;
 
@@ -101,7 +109,7 @@ export function ObjectList({ planet, objects, total, missions, filters, selected
           ))}
         </select>
       </div>
-      <ul className="min-h-0 flex-1 overflow-auto p-2" aria-label={t.objects}>
+      <ul ref={listRef} className="min-h-0 flex-1 overflow-auto p-2" aria-label={t.objects}>
         {objects.length === 0 && <li className="px-3 py-6 text-sm text-[#b7b0a4]">{t.noObjects}</li>}
         {objects.map((object) => {
           const mission = missionById(missions, object.missionId);
@@ -110,6 +118,7 @@ export function ObjectList({ planet, objects, total, missions, filters, selected
             <li key={object.id}>
               <button
                 type="button"
+                data-object-id={object.id}
                 onClick={() => onSelect(object.id)}
                 aria-current={selected ? "true" : undefined}
                 className={`flex w-full items-start gap-3 rounded-2xl px-3 py-2.5 text-left ${selected ? "bg-white/10" : "hover:bg-white/5"}`}
