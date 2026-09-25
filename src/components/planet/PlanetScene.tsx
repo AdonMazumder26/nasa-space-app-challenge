@@ -29,8 +29,14 @@ const textureUrl: Record<PlanetId, string> = {
   mars: "/textures/mars.jpg",
 };
 
-useTexture.preload(textureUrl.moon);
-useTexture.preload(textureUrl.mars);
+// Small maps so the globe appears immediately; the 8K map replaces them once it arrives.
+const previewUrl: Record<PlanetId, string> = {
+  moon: "/textures/moon-preview.jpg",
+  mars: "/textures/mars-preview.jpg",
+};
+
+useTexture.preload(previewUrl.moon);
+useTexture.preload(previewUrl.mars);
 
 export type SceneHandle = {
   zoomIn: () => void;
@@ -56,7 +62,7 @@ type SceneProps = {
   sceneRef: { current: SceneHandle | null };
 };
 
-class WebglBoundary extends Component<{ children: ReactNode; message: string }, { failed: boolean }> {
+class WebglBoundary extends Component<{ children: ReactNode; fallback: ReactNode }, { failed: boolean }> {
   state = { failed: false };
 
   static getDerivedStateFromError(): { failed: boolean } {
@@ -64,15 +70,50 @@ class WebglBoundary extends Component<{ children: ReactNode; message: string }, 
   }
 
   render() {
-    if (this.state.failed) {
-      return (
-        <div className="flex h-full items-end p-6">
-          <p className="max-w-sm rounded-2xl border border-white/10 bg-black/70 px-4 py-3 text-sm text-[#f3efe6]">{this.props.message}</p>
-        </div>
-      );
-    }
-    return this.props.children;
+    return this.state.failed ? this.props.fallback : this.props.children;
   }
+}
+
+export function webglAvailable(): boolean {
+  try {
+    const probe = document.createElement("canvas");
+    return Boolean(probe.getContext("webgl2") ?? probe.getContext("webgl"));
+  } catch {
+    return false;
+  }
+}
+
+// Shown when the globe cannot be drawn. The catalog stays usable without WebGL.
+function PlainList({
+  objects,
+  message,
+  labelFor,
+  onSelect,
+}: {
+  objects: Artifact[];
+  message: string;
+  labelFor: (object: Artifact) => string;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <div className="absolute inset-0 overflow-y-auto p-6">
+      <p className="max-w-prose rounded-2xl border border-white/10 bg-black/70 px-4 py-3 text-sm text-[#f3efe6]">{message}</p>
+      <ul className="mt-4 grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+        {objects.map((object) => (
+          <li key={object.id}>
+            <button
+              type="button"
+              onClick={() => onSelect(object.id)}
+              className="flex w-full items-center gap-2 rounded-xl border border-white/10 bg-[#090b10]/80 px-3 py-2 text-left text-sm text-[#f3efe6] hover:border-white/25"
+            >
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: typeColor[object.type] }} />
+              <span className="truncate">{labelFor(object)}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 class TextureBoundary extends Component<{ children: ReactNode; fallback: ReactNode }, { failed: boolean }> {
@@ -97,15 +138,38 @@ function FallbackSphere({ planet }: { planet: PlanetId }) {
 }
 
 function TexturedPlanet({ planet }: { planet: PlanetId }) {
-  const texture = useTexture(textureUrl[planet]);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.anisotropy = 16;
+  const preview = useTexture(previewUrl[planet]);
+  preview.colorSpace = THREE.SRGBColorSpace;
+  preview.anisotropy = 16;
+  const [full, setFull] = useState<THREE.Texture | null>(null);
+
+  useEffect(() => {
+    setFull(null);
+    let cancelled = false;
+    let loaded: THREE.Texture | null = null;
+    new THREE.TextureLoader().load(textureUrl[planet], (texture) => {
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.anisotropy = 16;
+      if (cancelled) {
+        texture.dispose();
+        return;
+      }
+      loaded = texture;
+      setFull(texture);
+    });
+    return () => {
+      cancelled = true;
+      loaded?.dispose();
+    };
+  }, [planet]);
+
+  const map = full ?? preview;
   return (
     <mesh>
       <sphereGeometry args={[1, 96, 96]} />
       <meshStandardMaterial
-        map={texture}
-        bumpMap={texture}
+        map={map}
+        bumpMap={map}
         bumpScale={planet === "moon" ? 0.012 : 0.008}
         roughness={planet === "moon" ? 0.94 : 0.86}
         metalness={0.02}
@@ -677,8 +741,13 @@ function SceneContents(props: SceneProps) {
 }
 
 export function PlanetViewport(props: SceneProps) {
+  const fallback = (
+    <PlainList objects={props.objects} message={props.errorMessage} labelFor={props.labelFor} onSelect={props.onSelect} />
+  );
+  const [supported] = useState(webglAvailable);
+  if (!supported) return fallback;
   return (
-    <WebglBoundary message={props.errorMessage}>
+    <WebglBoundary fallback={fallback}>
       <div className="absolute inset-0">
         <Canvas
           camera={{ position: [DEFAULT_OFFSET.x, DEFAULT_OFFSET.y, DEFAULT_OFFSET.z], fov: 42, near: 0.05, far: 280 }}

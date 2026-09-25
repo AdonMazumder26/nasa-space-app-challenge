@@ -3,7 +3,7 @@ import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-
 import { LuMinus, LuPlus, LuRotateCcw } from "react-icons/lu";
 import { ObjectList } from "../components/object/ObjectList";
 import { StoryPanel } from "../components/object/StoryPanel";
-import { PlanetViewport, type SceneHandle } from "../components/planet/PlanetScene";
+import { PlanetViewport, webglAvailable, type SceneHandle } from "../components/planet/PlanetScene";
 import { SearchBox } from "../components/search/SearchBox";
 import { TimelineBar } from "../components/timeline/TimelineBar";
 import { TopBar } from "../components/layout/TopBar";
@@ -36,6 +36,9 @@ function Explorer({ planet }: { planet: PlanetId }) {
   const [focusNonce, setFocusNonce] = useState(0);
   const [emphasisNonce, setEmphasisNonce] = useState(0);
   const [holdSpin, setHoldSpin] = useState(false);
+  const [tour, setTour] = useState(false);
+  // Without a globe the camera controls have nothing to act on.
+  const [webgl] = useState(webglAvailable);
   const [veil, setVeil] = useState(false);
   const veilTimers = useRef<number[]>([]);
   const selectedId = searchParams.get("object");
@@ -60,6 +63,7 @@ function Explorer({ planet }: { planet: PlanetId }) {
   useEffect(() => {
     setFilters((current) => ({ ...current, missionId: null }));
     setDrawer(null);
+    setTour(false);
   }, [planet]);
 
   useEffect(
@@ -69,9 +73,13 @@ function Explorer({ planet }: { planet: PlanetId }) {
     [],
   );
 
-  const layer = useRef({ help: false, drawer: null as "list" | "timeline" | null });
-  layer.current = { help: helpOpen, drawer };
+  const layer = useRef({ help: false, drawer: null as "list" | "timeline" | null, tour: false });
+  layer.current = { help: helpOpen, drawer, tour };
   const selectRef = useRef<(object: Artifact, reveal?: boolean) => void>(() => undefined);
+  const applyRef = useRef<(object: Artifact, reveal?: boolean) => void>(() => undefined);
+  // setSearchParams changes identity with the query string, which would restart the tour on every hop.
+  const paramsRef = useRef(setSearchParams);
+  paramsRef.current = setSearchParams;
   const neighbors = useRef<{ previous: Artifact | null; next: Artifact | null }>({ previous: null, next: null });
 
   useEffect(() => {
@@ -81,6 +89,10 @@ function Explorer({ planet }: { planet: PlanetId }) {
       if (event.key === "Escape") {
         if (layer.current.help) {
           setHelpOpen(false);
+          return;
+        }
+        if (layer.current.tour) {
+          setTour(false);
           return;
         }
         if (layer.current.drawer) {
@@ -107,12 +119,18 @@ function Explorer({ planet }: { planet: PlanetId }) {
     () => filterObjects(catalog.objects, catalog.missions, planet, "", filters),
     [planet, filters],
   );
+  const tourOrder = useMemo(() => {
+    const arrivalOf = (object: Artifact) => missionById(catalog.missions, object.missionId)?.arrivalDate ?? "9999";
+    return catalog.objects
+      .filter((object) => object.planet === planet)
+      .sort((a, b) => arrivalOf(a).localeCompare(arrivalOf(b)) || a.id.localeCompare(b.id));
+  }, [planet]);
   const selected = catalog.objects.find((object) => object.id === selectedId && object.planet === planet) ?? null;
   const markers = selected && !filtered.some((object) => object.id === selected.id) ? [...filtered, selected] : filtered;
   const planetTotal = catalog.objects.filter((object) => object.planet === planet).length;
   const events = catalog.events.filter((event) => catalog.objects.find((object) => object.id === event.objectId)?.planet === planet);
 
-  const selectObject = (object: Artifact, reveal = true) => {
+  const applySelection = (object: Artifact, reveal = true) => {
     if (reveal) {
       const arrival = yearOf(missionById(catalog.missions, object.missionId)?.arrivalDate) ?? filters.throughYear;
       setFilters((current) => ({
@@ -132,6 +150,11 @@ function Explorer({ planet }: { planet: PlanetId }) {
     setSearchParams({ object: object.id }, { replace: true });
   };
 
+  const selectObject = (object: Artifact, reveal = true) => {
+    setTour(false);
+    applySelection(object, reveal);
+  };
+
   const openEvent = (event: TimelineEvent) => {
     const object = catalog.objects.find((item) => item.id === event.objectId);
     if (!object) return;
@@ -142,8 +165,38 @@ function Explorer({ planet }: { planet: PlanetId }) {
   };
 
   const closeStory = () => {
+    setTour(false);
     if (!selectedIdRef.current) return;
     setSearchParams({}, { replace: true });
+  };
+
+  applyRef.current = applySelection;
+
+  useEffect(() => {
+    if (!tour || tourOrder.length === 0) return;
+    let index = 0;
+    applyRef.current(tourOrder[0], false);
+    const timer = window.setInterval(() => {
+      index += 1;
+      if (index >= tourOrder.length) {
+        window.clearInterval(timer);
+        setTour(false);
+        paramsRef.current({}, { replace: true });
+        return;
+      }
+      applyRef.current(tourOrder[index], false);
+    }, reduced ? 4200 : 7000);
+    return () => window.clearInterval(timer);
+  }, [tour, tourOrder, reduced]);
+
+  const toggleTour = () => {
+    if (tour) {
+      setTour(false);
+      return;
+    }
+    setFilters({ types: [], statuses: [], missionId: null, throughYear: bounds.max });
+    setDrawer(null);
+    setTour(true);
   };
 
   const switchPlanet = (next: PlanetId) => {
@@ -239,14 +292,25 @@ function Explorer({ planet }: { planet: PlanetId }) {
         {showDock && (
           <div className={`pointer-events-auto absolute bottom-3 left-3 flex flex-col gap-2 ${selected && desktop ? "right-[27rem]" : "right-3"}`}>
             <div className="flex items-center justify-between gap-2">
-              <button
-                type="button"
-                aria-pressed={drawer === "list"}
-                onClick={() => toggleDrawer("list")}
-                className={`rounded-full border px-3 py-2 text-sm ${drawer === "list" ? "border-[#e39a62] bg-[#e39a62]/15" : "border-white/15 bg-black/70"}`}
-              >
-                {t.objects}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  aria-pressed={drawer === "list"}
+                  onClick={() => toggleDrawer("list")}
+                  className={`rounded-full border px-3 py-2 text-sm ${drawer === "list" ? "border-[#e39a62] bg-[#e39a62]/15" : "border-white/15 bg-black/70"}`}
+                >
+                  {t.objects}
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={tour}
+                  onClick={toggleTour}
+                  className={`rounded-full border px-3 py-2 text-sm ${tour ? "border-[#e39a62] bg-[#e39a62]/15 text-[#e39a62]" : "border-white/15 bg-black/70"}`}
+                >
+                  {tour ? t.stopTour : t.tour}
+                </button>
+              </div>
+              {webgl && (
               <CameraCluster
                 zoomInLabel={t.zoomIn}
                 zoomOutLabel={t.zoomOut}
@@ -261,6 +325,7 @@ function Explorer({ planet }: { planet: PlanetId }) {
                 }}
                 onSpin={() => setAutoRotate((value) => !value)}
               />
+              )}
             </div>
             {timelineVisible && <TimelineBar events={events} activeId={selected?.id ?? null} onSelect={openEvent} />}
             <button
@@ -279,7 +344,17 @@ function Explorer({ planet }: { planet: PlanetId }) {
           </div>
         )}
         {!desktop && selected && (
-          <div className="pointer-events-auto absolute right-3 bottom-[calc(56dvh+0.75rem)]">
+          <div className="pointer-events-auto absolute right-3 bottom-[calc(56dvh+0.75rem)] flex items-center gap-2">
+            {tour && (
+              <button
+                type="button"
+                onClick={toggleTour}
+                className="rounded-full border border-[#e39a62] bg-[#e39a62]/15 px-3 py-2 text-sm text-[#e39a62]"
+              >
+                {t.stopTour}
+              </button>
+            )}
+            {webgl && (
             <CameraCluster
               zoomInLabel={t.zoomIn}
               zoomOutLabel={t.zoomOut}
@@ -294,6 +369,7 @@ function Explorer({ planet }: { planet: PlanetId }) {
               }}
               onSpin={() => setAutoRotate((value) => !value)}
             />
+            )}
           </div>
         )}
       </div>

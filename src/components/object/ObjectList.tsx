@@ -4,8 +4,8 @@ import { missionById } from "../../lib/filtering";
 import { typeColor } from "../../lib/presentation";
 import type { Artifact, Filters, Mission, ObjectStatus, ObjectType, PlanetId } from "../../types/catalog";
 
-const types: ObjectType[] = ["descent_stage", "lander", "rover", "experiment", "instrument"];
-const statuses: ObjectStatus[] = ["mission_complete", "communication_lost", "active", "inactive", "unknown"];
+const types: ObjectType[] = ["descent_stage", "lander", "rover", "experiment", "instrument", "impact_hardware"];
+const statuses: ObjectStatus[] = ["mission_complete", "communication_lost", "active", "inactive", "impacted", "unknown"];
 
 type Props = {
   planet: PlanetId;

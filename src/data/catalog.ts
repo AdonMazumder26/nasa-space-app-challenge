@@ -33,6 +33,14 @@ const featuredObjectId: Record<string, string> = {
   insight: "insight",
   "mars-2020": "perseverance",
   "beagle-2": "beagle-2",
+  beresheet: "beresheet-impact",
+  "chandrayaan-2": "chandrayaan-2-vikram-impact",
+  "change-5": "change-5-lander",
+  "change-6": "change-6-lander",
+  "luna-25": "luna-25-impact",
+  slim: "slim-lander",
+  "tianwen-1": "tianwen-1-lander",
+  "exomars-2016": "schiaparelli",
 };
 
 const endings: TimelineEvent[] = [
