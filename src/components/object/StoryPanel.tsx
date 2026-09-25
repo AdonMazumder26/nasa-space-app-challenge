@@ -1,11 +1,12 @@
 import { motion } from "framer-motion";
 import { LuX } from "react-icons/lu";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useI18n } from "../../features/localization/LanguageContext";
 import { formatCoordinate } from "../../lib/coordinates/latLon";
 import { missionById } from "../../lib/filtering";
 import { formatDisplayDate } from "../../lib/presentation";
-import type { Artifact, Mission, Source } from "../../types/catalog";
+import type { Artifact, CatalogImage, Mission, Source } from "../../types/catalog";
+import type { Lang } from "../../features/localization/strings";
 
 type Props = {
   object: Artifact;
@@ -58,6 +59,9 @@ export function StoryPanel({ object, missions, sources, mobile, reducedMotion, o
       </div>
       <div className="space-y-5 px-5 py-4 text-sm leading-6">
         <p className="text-base text-[#f3efe6]">{object.summary[lang]}</p>
+        {object.images.map((image) => (
+          <StoryImage key={image.id} image={image} lang={lang} label={t.photograph} source={sources.find((item) => item.id === image.sourceId)} />
+        ))}
         <dl className="grid grid-cols-2 gap-3 rounded-2xl border border-white/10 bg-black/25 p-3 text-xs">
           <div>
             <dt className="text-[#b7b0a4]">{t.coordinates}</dt>
@@ -115,6 +119,32 @@ export function StoryPanel({ object, missions, sources, mobile, reducedMotion, o
         </div>
       </div>
     </motion.aside>
+  );
+}
+
+function StoryImage({ image, lang, label, source }: { image: CatalogImage; lang: Lang; label: string; source?: Source }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) return null;
+  return (
+    <figure>
+      <img
+        src={image.url}
+        alt={image.alt[lang]}
+        onError={() => setFailed(true)}
+        className="max-h-64 w-full rounded-2xl bg-black object-contain"
+      />
+      <figcaption className="mt-2 text-xs leading-5 text-[#b7b0a4]">
+        {label}. {image.credit}
+        {source && (
+          <>
+            {" "}
+            <a href={source.url} target="_blank" rel="noreferrer noopener" className="text-[#e7d3b0] underline decoration-white/20 underline-offset-2">
+              {source.title}
+            </a>
+          </>
+        )}
+      </figcaption>
+    </figure>
   );
 }
 

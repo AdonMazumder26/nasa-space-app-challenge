@@ -57,7 +57,8 @@ const en = {
   textureCredit: "Globe textures",
   coordinateNote:
     "Markers use one shared latitude/longitude conversion. Longitudes are east-positive, from −180° to 180°. A published west longitude is stored with the opposite sign.",
-  offlineNote: "The catalog, interface, and globe maps are stored with the app. Source links still need a network.",
+  photograph: "Photograph",
+  offlineNote: "The catalog, interface, globe maps, and object photographs are stored with the app. Source links still need a network.",
   notLive: "Active rovers are marked at their documented landing sites. This app does not follow them live.",
   openList: "Object list",
   helpTitle: "Looking around",
@@ -154,7 +155,8 @@ const bn: typeof en = {
   textureCredit: "গোলকের মানচিত্র",
   coordinateNote:
     "চিহ্নগুলো একই অক্ষাংশ/দ্রাঘিমা রূপান্তর ব্যবহার করে। দ্রাঘিমা পূর্ব-ধনাত্মক, −১৮০° থেকে ১৮০°। প্রকাশিত পশ্চিম দ্রাঘিমা উল্টো চিহ্নে রাখা।",
-  offlineNote: "তালিকা, ইন্টারফেস ও গোলকের মানচিত্র অ্যাপের সঙ্গে আছে। উৎসের লিঙ্কে নেটওয়ার্ক লাগে।",
+  photograph: "আলোকচিত্র",
+  offlineNote: "তালিকা, ইন্টারফেস, গোলকের মানচিত্র ও বস্তুর আলোকচিত্র অ্যাপের সঙ্গে আছে। উৎসের লিঙ্কে নেটওয়ার্ক লাগে।",
   notLive: "সক্রিয় রোভার তাদের নথিভুক্ত অবতরণস্থলে চিহ্নিত। এই অ্যাপ তাদের তাৎক্ষণিক অনুসরণ করে না।",
   openList: "বস্তুর তালিকা",
   helpTitle: "চারপাশ দেখা",

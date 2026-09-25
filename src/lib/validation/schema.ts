@@ -98,6 +98,10 @@ export function validateCatalog(input: {
     for (const sourceId of object.sources) {
       if (!sourceIds.has(sourceId)) issues.push(`${object.id} missing source ${sourceId}`);
     }
+    for (const image of object.images) {
+      if (!sourceIds.has(image.sourceId)) issues.push(`${object.id} image ${image.id} missing source ${image.sourceId}`);
+      if (!image.alt.en || !image.alt.bn) issues.push(`${object.id} image ${image.id} missing alt text`);
+    }
   }
 
   for (const mission of input.missions) {

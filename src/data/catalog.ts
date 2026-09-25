@@ -3,6 +3,7 @@ import { validateCatalog } from "../lib/validation/schema";
 import { marsObjects } from "./marsObjects";
 import { missions } from "./missions";
 import { moonObjects } from "./moonObjects";
+import { objectImages } from "./objectImages";
 import { sources } from "./sources";
 
 const featuredObjectId: Record<string, string> = {
@@ -168,7 +169,11 @@ function buildTimeline(): TimelineEvent[] {
   return [...arrivals, ...endings].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
 }
 
-export const objects = [...moonObjects, ...marsObjects];
+export const objects = [...moonObjects, ...marsObjects].map((object) => {
+  const images = objectImages[object.id] ?? [];
+  const extraSources = images.map((image) => image.sourceId).filter((sourceId) => !object.sources.includes(sourceId));
+  return { ...object, images, sources: [...object.sources, ...extraSources] };
+});
 export const timeline = buildTimeline();
 
 export const catalog = {
