@@ -1,0 +1,64 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Outfit", "Hind Siliguri", "Nirmala UI", sans-serif;
+  --font-display: "Fraunces", "Times New Roman", serif;
+  --color-space: #090b10;
+  --color-ink: #f3efe6;
+  --color-muted: #b7b0a4;
+  --color-copper: #e39a62;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  background: #090b10;
+  color: #f3efe6;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  text-rendering: optimizeLegibility;
+}
+
+body[data-lang="bn"] {
+  font-family: "Hind Siliguri", "Nirmala UI", "Outfit", sans-serif;
+}
+
+body[data-lang="bn"] .font-display {
+  font-family: "Hind Siliguri", "Nirmala UI", sans-serif;
+}
+
+.font-display {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+::selection {
+  background: #e39a62;
+  color: #1a100c;
+}
+
+:focus-visible {
+  outline: 2px solid #e39a62;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
