@@ -11,6 +11,18 @@ import type { Artifact, PlanetId } from "../../types/catalog";
 const MIN_DISTANCE = 1.42;
 const MAX_DISTANCE = 5.8;
 const DEFAULT_OFFSET = new THREE.Vector3(2.72, 0.5, 0.22);
+// One viewing turn in about three minutes. This is not a real sidereal day.
+const VIEW_TURN = (Math.PI * 2 * 0.32) / 60;
+
+function applySpin(vector: THREE.Vector3, angle: number) {
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const x = vector.x * cos + vector.z * sin;
+  const z = -vector.x * sin + vector.z * cos;
+  vector.x = x;
+  vector.z = z;
+  return vector;
+}
 
 const textureUrl: Record<PlanetId, string> = {
   moon: "/textures/moon.jpg",
@@ -159,6 +171,15 @@ function Lights({ planet }: { planet: PlanetId }) {
   );
 }
 
+function CameraFill({ enabled }: { enabled: boolean }) {
+  const light = useRef<THREE.DirectionalLight>(null);
+  const { camera } = useThree();
+  useFrame(() => {
+    light.current?.position.copy(camera.position);
+  });
+  return <directionalLight ref={light} intensity={enabled ? 1.35 : 0} color="#f7f3ea" />;
+}
+
 type FocusAnim = { from: THREE.Vector3; to: THREE.Vector3; started: number };
 
 function CameraRig({
@@ -170,6 +191,8 @@ function CameraRig({
   autoRotate,
   reducedMotion,
   skipEmpty,
+  spinAngle,
+  spinGate,
   onEmptyClick,
 }: {
   sceneRef: { current: SceneHandle | null };
@@ -180,6 +203,8 @@ function CameraRig({
   autoRotate: boolean;
   reducedMotion: boolean;
   skipEmpty: { current: boolean };
+  spinAngle: { current: number };
+  spinGate: { current: boolean };
   onEmptyClick: () => void;
 }) {
   const camera = useThree((state) => state.camera);
@@ -189,6 +214,7 @@ function CameraRig({
   const [interacting, setInteracting] = useState(false);
   const [focusing, setFocusing] = useState(false);
   const idle = useRef<number | null>(null);
+  spinGate.current = autoRotate && !reducedMotion && !interacting && !focusing && !selected;
 
   const applyDistance = (nextDistance: number) => {
     const distance = camera.position.length() || 1;
@@ -250,7 +276,7 @@ function CameraRig({
     }
     const direction = latLonToVector(selected.location.latitude, selected.location.longitude, 1);
     const length = Math.hypot(direction.x, direction.y, direction.z) || 1;
-    const dir = new THREE.Vector3(direction.x, direction.y, direction.z).multiplyScalar(1 / length);
+    const dir = applySpin(new THREE.Vector3(direction.x, direction.y, direction.z).multiplyScalar(1 / length), spinAngle.current);
     const distance = 1.58;
     const pole = Math.abs(dir.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
     const side = new THREE.Vector3().crossVectors(dir, pole).normalize();
@@ -264,7 +290,7 @@ function CameraRig({
     }
     focus.current = { from: camera.position.clone(), to, started: performance.now() };
     setFocusing(true);
-  }, [selected, focusNonce, reducedMotion, camera, intro]);
+  }, [selected, focusNonce, reducedMotion, camera, intro, spinAngle]);
 
   const emptyClick = useRef(onEmptyClick);
   emptyClick.current = onEmptyClick;
@@ -329,8 +355,7 @@ function CameraRig({
       maxDistance={MAX_DISTANCE}
       minPolarAngle={0.16}
       maxPolarAngle={Math.PI - 0.16}
-      autoRotate={autoRotate && !reducedMotion && !interacting && !focusing}
-      autoRotateSpeed={0.32}
+      autoRotate={false}
       onStart={() => {
         if (idle.current) window.clearTimeout(idle.current);
         setInteracting(true);
@@ -422,13 +447,14 @@ function Marker({
 
 type Cluster = { id: string; objectIds: string[]; position: THREE.Vector3 };
 
-function clusterMarkers(objects: Artifact[], camera: THREE.Camera, width: number, height: number): Cluster[] {
+function clusterMarkers(objects: Artifact[], camera: THREE.Camera, width: number, height: number, yaw: number): Cluster[] {
   const visible = objects.flatMap((object) => {
     const vector = latLonToVector(object.location.latitude, object.location.longitude, MARKER_ALTITUDE);
     const position = new THREE.Vector3(vector.x, vector.y, vector.z);
-    const facing = position.clone().normalize().dot(camera.position.clone().normalize()) > 0.12;
+    const world = applySpin(position.clone(), yaw);
+    const facing = world.clone().normalize().dot(camera.position.clone().normalize()) > 0.12;
     if (!facing) return [];
-    const ndc = position.clone().project(camera);
+    const ndc = world.project(camera);
     return [{ object, position, x: (ndc.x * 0.5 + 0.5) * width, y: (-ndc.y * 0.5 + 0.5) * height }];
   });
 
@@ -473,6 +499,7 @@ function MarkerLayer({
   emphasisNonce,
   reducedMotion,
   skipEmpty,
+  spinAngle,
   clusterHint,
   labelFor,
   onSelect,
@@ -482,6 +509,7 @@ function MarkerLayer({
   emphasisNonce: number;
   reducedMotion: boolean;
   skipEmpty: { current: boolean };
+  spinAngle: { current: number };
   clusterHint: string;
   labelFor: (object: Artifact) => string;
   onSelect: (id: string) => void;
@@ -496,7 +524,7 @@ function MarkerLayer({
   useFrame((state) => {
     if (state.clock.elapsedTime - last.current < 0.25) return;
     last.current = state.clock.elapsedTime;
-    const next = clusterMarkers(objects, camera, size.width, size.height);
+    const next = clusterMarkers(objects, camera, size.width, size.height, spinAngle.current);
     const key = next.map((cluster) => cluster.id).join(";");
     if (key !== signature.current) {
       signature.current = key;
@@ -564,6 +592,28 @@ function MarkerLayer({
   );
 }
 
+function SpinningBody({
+  angle,
+  gate,
+  children,
+}: {
+  angle: { current: number };
+  gate: { current: boolean };
+  children: ReactNode;
+}) {
+  const ref = useRef<THREE.Group>(null);
+  useLayoutEffect(() => {
+    if (ref.current) ref.current.rotation.y = angle.current;
+  });
+  useFrame((_, delta) => {
+    const group = ref.current;
+    if (!group) return;
+    if (gate.current) angle.current += delta * VIEW_TURN;
+    group.rotation.y = angle.current;
+  });
+  return <group ref={ref}>{children}</group>;
+}
+
 function SurfaceLoader({ label }: { label: string }) {
   const { active, progress } = useProgress();
   if (!active) return null;
@@ -577,27 +627,38 @@ function SurfaceLoader({ label }: { label: string }) {
 function SceneContents(props: SceneProps) {
   const selected = props.objects.find((object) => object.id === props.selectedId) ?? null;
   const skipEmpty = useRef(false);
+  const spinAngle = useRef(0);
+  const spinGate = useRef(false);
+  const planetSeen = useRef(props.planet);
+  if (planetSeen.current !== props.planet) {
+    planetSeen.current = props.planet;
+    spinAngle.current = 0;
+  }
   return (
     <>
       <color attach="background" args={["#070910"]} />
       <StarField />
       <Lights planet={props.planet} />
-      <TextureBoundary key={props.planet} fallback={<FallbackSphere planet={props.planet} />}>
-        <Suspense fallback={<FallbackSphere planet={props.planet} />}>
-          <TexturedPlanet planet={props.planet} />
-        </Suspense>
-      </TextureBoundary>
-      {props.planet === "mars" && <MarsAir />}
-      <MarkerLayer
-        objects={props.objects}
-        selectedId={props.selectedId}
-        emphasisNonce={props.emphasisNonce}
-        reducedMotion={props.reducedMotion}
-        skipEmpty={skipEmpty}
-        clusterHint={props.clusterHint}
-        labelFor={props.labelFor}
-        onSelect={props.onSelect}
-      />
+      <CameraFill enabled={selected !== null} />
+      <SpinningBody angle={spinAngle} gate={spinGate}>
+        <TextureBoundary key={props.planet} fallback={<FallbackSphere planet={props.planet} />}>
+          <Suspense fallback={<FallbackSphere planet={props.planet} />}>
+            <TexturedPlanet planet={props.planet} />
+          </Suspense>
+        </TextureBoundary>
+        {props.planet === "mars" && <MarsAir />}
+        <MarkerLayer
+          objects={props.objects}
+          selectedId={props.selectedId}
+          emphasisNonce={props.emphasisNonce}
+          reducedMotion={props.reducedMotion}
+          skipEmpty={skipEmpty}
+          spinAngle={spinAngle}
+          clusterHint={props.clusterHint}
+          labelFor={props.labelFor}
+          onSelect={props.onSelect}
+        />
+      </SpinningBody>
       <CameraRig
         sceneRef={props.sceneRef}
         planet={props.planet}
@@ -607,6 +668,8 @@ function SceneContents(props: SceneProps) {
         autoRotate={props.autoRotate}
         reducedMotion={props.reducedMotion}
         skipEmpty={skipEmpty}
+        spinAngle={spinAngle}
+        spinGate={spinGate}
         onEmptyClick={props.onEmptyClick}
       />
     </>
