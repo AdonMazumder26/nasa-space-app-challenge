@@ -69,6 +69,8 @@ type SceneProps = {
   onView?: (view: SurfaceView) => void;
   onFlight?: (phase: FlightPhase) => void;
   missionIds?: readonly string[];
+  // Moves the site left and up so the story panel and bottom bar do not cover it.
+  siteFrame?: { right: number; up: number };
 };
 
 class WebglBoundary extends Component<{ children: ReactNode; fallback: ReactNode }, { failed: boolean }> {
@@ -270,6 +272,7 @@ function CameraRig({
   spinGate,
   onEmptyClick,
   onFlight,
+  siteFrame,
 }: {
   sceneRef: { current: SceneHandle | null };
   planet: PlanetId;
@@ -283,6 +286,7 @@ function CameraRig({
   spinGate: { current: boolean };
   onEmptyClick: () => void;
   onFlight?: (phase: FlightPhase) => void;
+  siteFrame: { right: number; up: number };
 }) {
   const camera = useThree((state) => state.camera);
   const gl = useThree((state) => state.gl);
@@ -368,12 +372,18 @@ function CameraRig({
     }
     const direction = latLonToVector(selected.location.latitude, selected.location.longitude, 1);
     const length = Math.hypot(direction.x, direction.y, direction.z) || 1;
-    const dir = applySpin(new THREE.Vector3(direction.x, direction.y, direction.z).multiplyScalar(1 / length), spinAngle.current);
-    const distance = 1.58;
-    const pole = Math.abs(dir.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
-    const side = new THREE.Vector3().crossVectors(dir, pole).normalize();
-    const lift = new THREE.Vector3().crossVectors(side, dir).normalize();
-    const to = dir.multiplyScalar(distance).addScaledVector(lift, distance * 0.1);
+    const radial = applySpin(new THREE.Vector3(direction.x, direction.y, direction.z).multiplyScalar(1 / length), spinAngle.current);
+    const distance = 1.5;
+    const worldUp = new THREE.Vector3(0, 1, 0);
+    const screenUp = worldUp.clone().sub(radial.clone().multiplyScalar(worldUp.dot(radial)));
+    if (screenUp.lengthSq() < 1e-4) screenUp.set(1, 0, 0);
+    screenUp.normalize();
+    const screenRight = new THREE.Vector3().crossVectors(radial, screenUp).normalize();
+    // Moving the camera right or down puts the site left or up, in the open part of the screen.
+    const to = radial
+      .multiplyScalar(distance)
+      .addScaledVector(screenRight, distance * siteFrame.right)
+      .addScaledVector(screenUp, distance * -siteFrame.up);
     if (reducedMotion) {
       camera.position.copy(to);
       controls.current?.target.set(0, 0, 0);
@@ -383,7 +393,7 @@ function CameraRig({
     }
     focus.current = { from: camera.position.clone(), to, started: performance.now(), selected: true };
     setFocusing(true);
-  }, [selected, focusNonce, reducedMotion, camera, intro, spinAngle]);
+  }, [selected, focusNonce, reducedMotion, camera, intro, spinAngle, siteFrame.right, siteFrame.up]);
 
   const emptyClick = useRef(onEmptyClick);
   emptyClick.current = onEmptyClick;
@@ -821,7 +831,16 @@ function MarkerLayer({
           onSelect={onSelect}
         />
       ))}
-      {clusters.map((cluster) => (
+      {clusters
+        .filter((cluster) => {
+          if (!selectedId) return true;
+          const current = objects.find((object) => object.id === selectedId);
+          if (!current) return true;
+          const place = latLonToVector(current.location.latitude, current.location.longitude, MARKER_ALTITUDE);
+          const gap = cluster.position.distanceTo(new THREE.Vector3(place.x, place.y, place.z));
+          return gap > 0.03;
+        })
+        .map((cluster) => (
         <Html key={cluster.id} position={cluster.position} center zIndexRange={[20, 0]} style={{ pointerEvents: "auto" }}>
           <div onPointerDown={(event) => event.stopPropagation()}>
             <button
@@ -1094,6 +1113,7 @@ function SceneContents(props: SceneProps) {
         spinGate={spinGate}
         onEmptyClick={props.onEmptyClick}
         onFlight={props.onFlight}
+        siteFrame={props.siteFrame ?? { right: 0, up: 0 }}
       />
     </>
   );

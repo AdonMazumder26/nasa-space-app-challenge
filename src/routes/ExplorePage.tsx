@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { LuMinus, LuPlus, LuRotateCcw } from "react-icons/lu";
+import { LuBookOpen, LuCompass, LuMap, LuMenu, LuMinus, LuPlus, LuRoute, LuRotateCcw, LuScan, LuX } from "react-icons/lu";
 import { ObjectList } from "../components/object/ObjectList";
 import { StoryPanel } from "../components/object/StoryPanel";
 import { PlanetViewport, webglAvailable, type SceneHandle } from "../components/planet/PlanetScene";
@@ -70,8 +70,10 @@ function Explorer({ planet }: { planet: PlanetId }) {
   const [seeking, setSeeking] = useState(false);
   const [archiveFull, setArchiveFull] = useState(false);
   const [mapOpen, setMapOpen] = useState(desktop);
+  const [toolsOpen, setToolsOpen] = useState(false);
   const seekTurn = useRef(0);
   const noticeTimer = useRef<number | null>(null);
+  const ignoreEmptyUntil = useRef(0);
   // Without a globe the camera controls have nothing to act on.
   const [webgl] = useState(webglAvailable);
   const [veil, setVeil] = useState(false);
@@ -219,6 +221,7 @@ function Explorer({ planet }: { planet: PlanetId }) {
     }
     setFocusNonce((value) => value + 1);
     setDrawer(null);
+    ignoreEmptyUntil.current = performance.now() + 700;
     const mission = missionId ?? searchParams.get("mission");
     const keepMission = mission && mission === object.missionId ? mission : null;
     if (object.planet !== planet) {
@@ -245,6 +248,7 @@ function Explorer({ planet }: { planet: PlanetId }) {
   };
 
   const closeStory = () => {
+    if (performance.now() < ignoreEmptyUntil.current) return;
     setTour(false);
     setFlight("idle");
     if (!selectedIdRef.current) return;
@@ -518,12 +522,13 @@ function Explorer({ planet }: { planet: PlanetId }) {
 
   return (
     <div className="relative h-dvh overflow-hidden">
-      <div className="absolute inset-x-0 top-16 bottom-0">
+      <div className="absolute inset-0">
         <PlanetViewport
           planet={planet}
           objects={markers}
           selectedId={selected?.id ?? null}
           focusNonce={focusNonce}
+          siteFrame={desktop ? { right: -0.16, up: 0 } : { right: 0, up: 0.22 }}
           emphasisNonce={emphasisNonce}
           intro={false}
           autoRotate={autoRotate && !holdSpin}
@@ -580,12 +585,29 @@ function Explorer({ planet }: { planet: PlanetId }) {
               <p className="text-sm text-[#f4f7ff]">{notice}</p>
             </div>
           )}
-          <div className="pointer-events-auto mt-3 flex flex-wrap gap-1">
-            <ToolButton label={seeking ? t.searchingArchive : selected ? t.discoverAnother : t.discoverSomething} onClick={discoverSite} />
-            <ToolButton label={scanning ? t.scanningSurface : t.scanSurface} onClick={runScan} />
-            <ToolButton label={t.explorerLog} pressed={panel === "log"} onClick={() => setPanel((current) => (current === "log" ? null : "log"))} />
-            <ToolButton label={t.myExpedition} pressed={panel === "expedition"} onClick={() => setPanel((current) => (current === "expedition" ? null : "expedition"))} />
-            <ToolButton label={mapOpen ? t.hideMap : t.showMap} pressed={mapOpen} onClick={() => setMapOpen((value) => !value)} />
+          <div className="pointer-events-auto mt-3 flex w-fit flex-col items-start gap-2">
+            <IconTool label={t.exploreTools} pressed={toolsOpen} expanded={toolsOpen} onClick={() => setToolsOpen((value) => !value)}>
+              {toolsOpen ? <LuX aria-hidden="true" /> : <LuMenu aria-hidden="true" />}
+            </IconTool>
+            <div inert={toolsOpen ? undefined : true} className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${toolsOpen ? "grid-rows-[1fr] opacity-100" : "pointer-events-none grid-rows-[0fr] opacity-0"} ${reduced ? "transition-none" : ""}`}>
+              <div className="flex flex-col gap-2 overflow-hidden">
+                <IconTool label={seeking ? t.searchingArchive : selected ? t.discoverAnother : t.discoverSomething} onClick={discoverSite}>
+                  <LuCompass aria-hidden="true" />
+                </IconTool>
+                <IconTool label={scanning ? t.scanningSurface : t.scanSurface} onClick={runScan}>
+                  <LuScan aria-hidden="true" />
+                </IconTool>
+                <IconTool label={t.explorerLog} pressed={panel === "log"} onClick={() => setPanel((current) => (current === "log" ? null : "log"))}>
+                  <LuBookOpen aria-hidden="true" />
+                </IconTool>
+                <IconTool label={t.myExpedition} pressed={panel === "expedition"} onClick={() => setPanel((current) => (current === "expedition" ? null : "expedition"))}>
+                  <LuRoute aria-hidden="true" />
+                </IconTool>
+                <IconTool label={mapOpen ? t.hideMap : t.showMap} pressed={mapOpen} onClick={() => setMapOpen((value) => !value)}>
+                  <LuMap aria-hidden="true" />
+                </IconTool>
+              </div>
+            </div>
           </div>
           {mapOpen && (
             <div className="pointer-events-none mt-3">
@@ -727,7 +749,7 @@ function Explorer({ planet }: { planet: PlanetId }) {
           />
         </div>
         {showDock && (
-          <div className={`pointer-events-auto absolute bottom-3 left-3 flex flex-col gap-2 ${selected && desktop ? "right-[27rem]" : "right-3"}`}>
+          <div className={`pointer-events-auto absolute bottom-[4.75rem] left-3 flex flex-col gap-2 ${selected && desktop ? "right-[27rem]" : "right-3"}`}>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap items-center gap-2">
                 <button
@@ -772,19 +794,27 @@ function Explorer({ planet }: { planet: PlanetId }) {
               />
               )}
             </div>
-            {timelineVisible && <TimelineBar events={events} activeId={selected?.id ?? null} onSelect={openEvent} />}
+          </div>
+        )}
+        {showDock && (
+          <div className="pointer-events-auto absolute inset-x-3 bottom-3 z-30">
+            {timelineVisible && (
+              <div className="mb-2">
+                <TimelineBar events={events} activeId={selected?.id ?? null} onSelect={openEvent} />
+              </div>
+            )}
             <button
               type="button"
               aria-expanded={timelineVisible}
               aria-label={t.timeline}
               onClick={() => toggleDrawer("timeline")}
-              className={`flex h-9 items-center gap-3 rounded-full border px-4 text-xs tracking-[0.14em] ${timelineVisible ? "border-[#f2a64a] bg-[#f2a64a]/15 text-[#f2a64a]" : "border-white/10 bg-[#070d1c]/80 text-[#f2a64a]"}`}
+              className={`flex h-11 w-full shrink-0 items-center gap-3 rounded-full border px-5 text-xs tracking-[0.14em] whitespace-nowrap ${timelineVisible ? "border-[#f2a64a] bg-[#f2a64a]/15 text-[#f2a64a]" : "border-white/15 bg-[#070d1c]/75 text-[#f2a64a]"}`}
             >
-              <span>{yearMin}</span>
-              <span className="h-px flex-1 bg-[#f2a64a]/70" />
-              <span className="uppercase">{t.timeline}</span>
-              <span className="h-px flex-1 bg-[#f2a64a]/70" />
-              <span>{yearMax}</span>
+              <span className="shrink-0">{yearMin}</span>
+              <span className="h-px min-w-6 flex-1 bg-[#f2a64a]/70" />
+              <span className="shrink-0 uppercase">{t.timeline}</span>
+              <span className="h-px min-w-6 flex-1 bg-[#f2a64a]/70" />
+              <span className="shrink-0">{yearMax}</span>
             </button>
           </div>
         )}
@@ -843,7 +873,7 @@ function Explorer({ planet }: { planet: PlanetId }) {
           onLeaveMission={() => setSearchParams({ object: selected.id }, { replace: true })}
           onEvent={(event) => {
             const object = catalog.objects.find((item) => item.id === event.objectId);
-            if (object && object.id !== selected.id) selectObject(object, false);
+            if (object) selectObject(object, false);
           }}
           inExpedition={Boolean(expedition?.artifactIds.includes(selected.id))}
           onToggleExpedition={() => changeExpedition(toggleExpeditionSite(expedition ?? undefined, selected.id))}
@@ -868,11 +898,35 @@ function Explorer({ planet }: { planet: PlanetId }) {
   );
 }
 
-function ToolButton({ label, onClick, pressed }: { label: string; onClick: () => void; pressed?: boolean }) {
+function IconTool({
+  label,
+  onClick,
+  pressed,
+  expanded,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  pressed?: boolean;
+  expanded?: boolean;
+  children: ReactNode;
+}) {
   return (
-    <button type="button" aria-pressed={pressed} onClick={onClick} className={`rounded-full border px-2.5 py-1 text-[11px] ${pressed ? "border-[#6aa4ff] text-[#6aa4ff]" : "border-white/15 bg-black/70 text-[#f4f7ff]"}`}>
-      {label}
-    </button>
+    <div className="group relative">
+      <button
+        type="button"
+        aria-label={label}
+        aria-pressed={pressed}
+        aria-expanded={expanded}
+        onClick={onClick}
+        className={`grid h-10 w-10 place-items-center rounded-full border text-[15px] shadow-lg backdrop-blur-md transition duration-300 ${pressed ? "border-[#6aa4ff] bg-[#3d7eff] text-[#f4f7ff]" : "border-white/25 bg-[#070d1c]/80 text-[#f4f7ff] hover:border-[#6aa4ff] hover:bg-[#121a31]"}`}
+      >
+        {children}
+      </button>
+      <span role="tooltip" className="pointer-events-none absolute top-1/2 left-[calc(100%+0.55rem)] z-40 -translate-y-1/2 rounded-full border border-white/10 bg-[#070d1c]/95 px-2.5 py-1 text-[11px] whitespace-nowrap text-[#f4f7ff] opacity-0 shadow-lg transition duration-200 group-hover:opacity-100 group-focus-within:opacity-100">
+        {label}
+      </span>
+    </div>
   );
 }
 

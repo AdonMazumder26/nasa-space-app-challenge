@@ -81,7 +81,7 @@ export function StoryPanel({
       : { initial: { x: 28, opacity: 0 }, animate: { x: 0, opacity: 1 } };
 
   return (
-    <div className={`pointer-events-none absolute inset-x-0 top-16 bottom-0 z-40 flex p-4 ${mobile ? "items-end pb-2" : "items-center justify-end pb-16"}`}>
+    <div className={`pointer-events-none absolute inset-x-0 top-16 bottom-0 z-40 flex p-4 ${mobile ? "items-end pb-2" : "items-center justify-end pb-20"}`}>
     <motion.aside
       {...motionProps}
       key={object.id}
