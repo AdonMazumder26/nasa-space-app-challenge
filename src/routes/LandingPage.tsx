@@ -30,7 +30,7 @@ export function LandingPage() {
         onEmptyClick={() => undefined}
         sceneRef={sceneRef}
       />
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_70%_40%,transparent_0%,rgba(9,11,16,0.2)_42%,rgba(9,11,16,0.88)_78%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_70%_40%,transparent_0%,rgba(7,13,28,0.2)_42%,rgba(7,13,28,0.88)_78%)]" />
       <div className="relative z-10 flex h-full flex-col">
         <div className="pointer-events-auto">
           <TopBar />
@@ -42,19 +42,19 @@ export function LandingPage() {
             transition={{ duration: reduced ? 0 : 0.7, delay: reduced ? 0 : 0.85 }}
             className="max-w-xl"
           >
-            <p className="text-[11px] tracking-[0.28em] text-[#e39a62] uppercase">{t.appKicker}</p>
-            <h1 className="font-display mt-3 text-5xl leading-[0.95] text-[#f3efe6] sm:text-7xl">{t.appTitle}</h1>
-            <p className="mt-5 text-lg text-[#f3efe6]">{t.landingLead}</p>
-            <p className="mt-3 max-w-lg text-sm leading-6 text-[#d9d2c6]">{t.landingBody}</p>
+            <p className="text-[11px] tracking-[0.28em] text-[#f2a64a] uppercase">{t.appKicker}</p>
+            <h1 className="font-display mt-3 text-5xl leading-[0.95] text-[#f4f7ff] sm:text-7xl">{t.appTitle}</h1>
+            <p className="mt-5 text-lg text-[#f4f7ff]">{t.landingLead}</p>
+            <p className="mt-3 max-w-lg text-sm leading-6 text-[#c5d2ea]">{t.landingBody}</p>
             <div className="pointer-events-auto mt-7 flex flex-wrap gap-3">
-              <Link to="/explore/moon" className="rounded-full bg-[#f3efe6] px-5 py-3 text-sm text-[#1a140f]">
+              <Link to="/explore/moon" className="rounded-full bg-[#3d7eff] px-5 py-3 text-sm text-[#f4f7ff]">
                 {t.enterMoon}
               </Link>
-              <Link to="/explore/mars" className="rounded-full border border-[#e39a62] px-5 py-3 text-sm text-[#f3efe6]">
+              <Link to="/explore/mars" className="rounded-full border border-[#f2a64a] px-5 py-3 text-sm text-[#f4f7ff]">
                 {t.enterMars}
               </Link>
             </div>
-            <p className="mt-4 text-xs text-[#b7b0a4]">{t.dragHint}</p>
+            <p className="mt-4 text-xs text-[#93a6c9]">{t.dragHint}</p>
           </motion.div>
         </main>
       </div>

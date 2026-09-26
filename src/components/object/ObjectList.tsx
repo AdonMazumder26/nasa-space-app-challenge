@@ -34,16 +34,16 @@ export function ObjectList({ planet, objects, total, missions, filters, selected
   const toggle = <T,>(list: T[], value: T) => (list.includes(value) ? list.filter((item) => item !== value) : [...list, value]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col rounded-3xl border border-white/10 bg-[#090b10]/75 shadow-2xl backdrop-blur-md">
+    <div className="flex h-full min-h-0 flex-col rounded-3xl border border-white/10 bg-[#070d1c]/75 shadow-2xl backdrop-blur-md">
       <div className="border-b border-white/10 px-4 py-3">
         <div className="flex items-baseline justify-between gap-3">
           <h2 className="font-display text-2xl">{t.objects}</h2>
-          <p className="text-xs text-[#b7b0a4]">
+          <p className="text-xs text-[#93a6c9]">
             {objects.length} / {total} {t.objectCount}
           </p>
         </div>
         <div className="mt-3">
-          <label className="text-[11px] tracking-[0.16em] text-[#b7b0a4] uppercase" htmlFor="year-range">
+          <label className="text-[11px] tracking-[0.16em] text-[#93a6c9] uppercase" htmlFor="year-range">
             {t.throughYear} {filters.throughYear}
           </label>
           <input
@@ -53,15 +53,15 @@ export function ObjectList({ planet, objects, total, missions, filters, selected
             max={yearBounds.max}
             value={filters.throughYear}
             onChange={(event) => onFilters({ ...filters, throughYear: Number(event.target.value) })}
-            className="mt-2 w-full accent-[#e39a62]"
+            className="mt-2 w-full accent-[#6aa4ff]"
           />
         </div>
       </div>
       <div className="space-y-3 border-b border-white/10 px-4 py-3">
         <div className="flex items-center justify-between">
-          <p className="text-[11px] tracking-[0.16em] text-[#b7b0a4] uppercase">{t.filters}</p>
+          <p className="text-[11px] tracking-[0.16em] text-[#93a6c9] uppercase">{t.filters}</p>
           {filtersOn && (
-            <button type="button" className="text-xs text-[#e39a62]" onClick={() => onFilters({ ...filters, types: [], statuses: [], missionId: null })}>
+            <button type="button" className="text-xs text-[#6aa4ff]" onClick={() => onFilters({ ...filters, types: [], statuses: [], missionId: null })}>
               {t.clearFilters}
             </button>
           )}
@@ -73,7 +73,7 @@ export function ObjectList({ planet, objects, total, missions, filters, selected
               type="button"
               aria-pressed={filters.types.includes(type)}
               onClick={() => onFilters({ ...filters, types: toggle(filters.types, type) })}
-              className={`rounded-full border px-2.5 py-1 text-xs ${filters.types.includes(type) ? "border-[#e39a62] bg-[#e39a62]/20" : "border-white/10"}`}
+              className={`rounded-full border px-2.5 py-1 text-xs ${filters.types.includes(type) ? "border-[#6aa4ff] bg-[#6aa4ff]/20" : "border-white/10"}`}
             >
               {t.typeLabels[type]}
             </button>
@@ -86,7 +86,7 @@ export function ObjectList({ planet, objects, total, missions, filters, selected
               type="button"
               aria-pressed={filters.statuses.includes(status)}
               onClick={() => onFilters({ ...filters, statuses: toggle(filters.statuses, status) })}
-              className={`rounded-full border px-2.5 py-1 text-xs ${filters.statuses.includes(status) ? "border-[#e39a62] bg-[#e39a62]/20" : "border-white/10"}`}
+              className={`rounded-full border px-2.5 py-1 text-xs ${filters.statuses.includes(status) ? "border-[#6aa4ff] bg-[#6aa4ff]/20" : "border-white/10"}`}
             >
               {t.statusLabels[status]}
             </button>
@@ -110,7 +110,7 @@ export function ObjectList({ planet, objects, total, missions, filters, selected
         </select>
       </div>
       <ul ref={listRef} className="min-h-0 flex-1 overflow-auto p-2" aria-label={t.objects}>
-        {objects.length === 0 && <li className="px-3 py-6 text-sm text-[#b7b0a4]">{t.noObjects}</li>}
+        {objects.length === 0 && <li className="px-3 py-6 text-sm text-[#93a6c9]">{t.noObjects}</li>}
         {objects.map((object) => {
           const mission = missionById(missions, object.missionId);
           const selected = object.id === selectedId;
@@ -126,7 +126,7 @@ export function ObjectList({ planet, objects, total, missions, filters, selected
                 <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: typeColor[object.type] }} />
                 <span className="min-w-0">
                   <span className="block truncate text-sm">{object.name[lang]}</span>
-                  <span className="block truncate text-xs text-[#b7b0a4]">
+                  <span className="block truncate text-xs text-[#93a6c9]">
                     {mission?.name[lang]} · {t.statusLabels[object.status]}
                   </span>
                 </span>

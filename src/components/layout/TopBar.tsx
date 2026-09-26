@@ -14,10 +14,10 @@ type Props = {
 export function TopBar({ planet, onPlanet, dimmed = false, onHelp, onFullscreen }: Props) {
   const { t, lang, setLang } = useI18n();
   return (
-    <header className={`relative z-30 flex h-16 items-center gap-3 border-b border-white/10 bg-[#090b10]/80 px-3 backdrop-blur-md transition-opacity duration-500 sm:px-5 ${dimmed ? "opacity-60" : ""}`}>
+    <header className={`relative z-30 flex h-16 items-center gap-3 border-b border-white/10 bg-[#070d1c]/80 px-3 backdrop-blur-md transition-opacity duration-500 sm:px-5 ${dimmed ? "opacity-60" : ""}`}>
       <Link to="/" className="min-w-0">
-        <p className="text-[10px] tracking-[0.22em] text-[#b7b0a4] uppercase">{t.appKicker}</p>
-        <p className="font-display truncate text-lg leading-none text-[#f3efe6]">{t.appTitle}</p>
+        <p className="text-[10px] tracking-[0.22em] text-[#93a6c9] uppercase">{t.appKicker}</p>
+        <p className="font-display truncate text-lg leading-none text-[#f4f7ff]">{t.appTitle}</p>
       </Link>
       <div className="ml-auto flex items-center gap-2">
         {planet && onPlanet && (
@@ -28,7 +28,7 @@ export function TopBar({ planet, onPlanet, dimmed = false, onHelp, onFullscreen 
                 type="button"
                 aria-pressed={planet === id}
                 onClick={() => onPlanet(id)}
-                className={`rounded-full px-3 py-1 text-sm ${planet === id ? "bg-[#f3efe6] text-[#1a140f]" : "text-[#f3efe6]"}`}
+                className={`rounded-full px-3 py-1 text-sm ${planet === id ? "bg-[#3d7eff] text-[#f4f7ff]" : "text-[#f4f7ff]"}`}
               >
                 {t[id]}
               </button>

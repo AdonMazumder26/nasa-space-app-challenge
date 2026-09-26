@@ -94,6 +94,18 @@ export type Mission = {
   sources: string[];
 };
 
+export type RoverPoint = {
+  latitude: number;
+  longitude: number;
+  date?: string;
+  sol?: number;
+};
+
+export type RoverRoute = {
+  roverId: string;
+  points: RoverPoint[];
+};
+
 export type TimelineEvent = {
   id: string;
   objectId: string;

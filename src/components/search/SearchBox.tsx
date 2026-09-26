@@ -45,7 +45,7 @@ export function SearchBox({ objects, missions, onSelect }: Props) {
         aria-label={t.searchLabel}
         title={t.searchLabel}
         onClick={() => setExpanded(true)}
-        className="grid h-10 w-10 place-items-center rounded-full border border-white/15 bg-black/70 text-[#f3efe6]"
+        className="grid h-10 w-10 place-items-center rounded-full border border-white/15 bg-black/70 text-[#f4f7ff]"
       >
         <LuSearch />
       </button>
@@ -57,7 +57,7 @@ export function SearchBox({ objects, missions, onSelect }: Props) {
       <label className="sr-only" htmlFor={`${listId}-input`}>
         {t.searchLabel}
       </label>
-      <LuSearch className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-[#b7b0a4]" aria-hidden />
+      <LuSearch className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-[#93a6c9]" aria-hidden />
       <input
         ref={inputRef}
         id={`${listId}-input`}
@@ -93,11 +93,11 @@ export function SearchBox({ objects, missions, onSelect }: Props) {
             setQuery("");
           }
         }}
-        className="w-full rounded-full border border-white/10 bg-black/40 py-2 pr-3 pl-10 text-sm outline-none placeholder:text-[#8d867c]"
+        className="w-full rounded-full border border-white/10 bg-black/40 py-2 pr-3 pl-10 text-sm outline-none placeholder:text-[#7d8eae]"
       />
       {open && query.trim() && (
-        <ul id={listId} role="listbox" className="absolute z-40 mt-2 max-h-80 w-full overflow-auto rounded-2xl border border-white/10 bg-[#12151c] p-1 shadow-2xl">
-          {results.length === 0 && <li className="px-3 py-2 text-sm text-[#b7b0a4]">{t.noResults}</li>}
+        <ul id={listId} role="listbox" className="absolute z-40 mt-2 max-h-80 w-full overflow-auto rounded-2xl border border-white/10 bg-[#10182e] p-1 shadow-2xl">
+          {results.length === 0 && <li className="px-3 py-2 text-sm text-[#93a6c9]">{t.noResults}</li>}
           {results.map((object, index) => {
             const mission = missionById(missions, object.missionId);
             return (
@@ -114,7 +114,7 @@ export function SearchBox({ objects, missions, onSelect }: Props) {
                   }}
                 >
                   <span className="block text-sm">{object.name[lang]}</span>
-                  <span className="block text-xs text-[#b7b0a4]">
+                  <span className="block text-xs text-[#93a6c9]">
                     {mission?.name[lang]} · {object.location.locationName}
                   </span>
                 </button>

@@ -7,10 +7,32 @@ import { PlanetViewport, webglAvailable, type SceneHandle } from "../components/
 import { SearchBox } from "../components/search/SearchBox";
 import { TimelineBar } from "../components/timeline/TimelineBar";
 import { TopBar } from "../components/layout/TopBar";
+import { ExpeditionPanel } from "../components/explore/ExpeditionPanel";
+import { ExplorerLog } from "../components/explore/ExplorerLog";
+import { Minimap } from "../components/explore/Minimap";
+import { ScanPanel } from "../components/explore/ScanPanel";
 import { catalog } from "../data/catalog";
+import { roverRoutes } from "../data/roverRoutes";
 import { useI18n } from "../features/localization/LanguageContext";
+import { fillCopy } from "../features/localization/strings";
 import { useMinWidth, usePrefersReducedMotion } from "../hooks/usePrefersReducedMotion";
 import { yearOf } from "../lib/coordinates/latLon";
+import { formatDistanceKm, surfaceDistanceKm } from "../lib/coordinates/distance";
+import {
+  markDiscovered,
+  markExplored,
+  moveExpeditionSite,
+  pickDiscovery,
+  readExploration,
+  scanAngle,
+  sitesFacing,
+  toggleExpeditionSite,
+  writeExploration,
+  type Expedition,
+  type ExplorationSave,
+  type FlightPhase,
+  type SurfaceView,
+} from "../lib/exploration";
 import { catalogYearBounds, filterObjects, missionById } from "../lib/filtering";
 import type { Artifact, Filters, PlanetId, TimelineEvent } from "../types/catalog";
 
@@ -37,6 +59,19 @@ function Explorer({ planet }: { planet: PlanetId }) {
   const [emphasisNonce, setEmphasisNonce] = useState(0);
   const [holdSpin, setHoldSpin] = useState(false);
   const [tour, setTour] = useState(false);
+  const [discovery, setDiscovery] = useState(true);
+  const [progress, setProgress] = useState<ExplorationSave>(() => readExploration());
+  const [flight, setFlight] = useState<FlightPhase>(() => (searchParams.get("object") && !reduced ? "locating" : "idle"));
+  const [notice, setNotice] = useState<string | null>(null);
+  const [view, setView] = useState<SurfaceView>({ level: "global", distance: 2.8, inView: 0, latitude: 0, longitude: 0 });
+  const [panel, setPanel] = useState<null | "log" | "expedition" | "scan">(null);
+  const [scanning, setScanning] = useState(false);
+  const [scanIds, setScanIds] = useState<string[] | null>(null);
+  const [seeking, setSeeking] = useState(false);
+  const [archiveFull, setArchiveFull] = useState(false);
+  const [mapOpen, setMapOpen] = useState(desktop);
+  const seekTurn = useRef(0);
+  const noticeTimer = useRef<number | null>(null);
   // Without a globe the camera controls have nothing to act on.
   const [webgl] = useState(webglAvailable);
   const [veil, setVeil] = useState(false);
@@ -60,21 +95,33 @@ function Explorer({ planet }: { planet: PlanetId }) {
     if (reduced) setAutoRotate(false);
   }, [reduced]);
 
+  const planetBoot = useRef(true);
   useEffect(() => {
+    if (planetBoot.current) {
+      planetBoot.current = false;
+      return;
+    }
     setFilters((current) => ({ ...current, missionId: null }));
     setDrawer(null);
     setTour(false);
+    setFlight("idle");
+    setNotice(null);
+    setPanel(null);
+    setScanIds(null);
+    setArchiveFull(false);
+    setView({ level: "global", distance: 2.8, inView: 0, latitude: 0, longitude: 0 });
   }, [planet]);
 
   useEffect(
-    () => () => {
+    () =>     () => {
       veilTimers.current.forEach((timer) => window.clearTimeout(timer));
+      if (noticeTimer.current) window.clearTimeout(noticeTimer.current);
     },
     [],
   );
 
-  const layer = useRef({ help: false, drawer: null as "list" | "timeline" | null, tour: false });
-  layer.current = { help: helpOpen, drawer, tour };
+  const layer = useRef({ help: false, drawer: null as "list" | "timeline" | null, tour: false, panel: null as typeof panel });
+  layer.current = { help: helpOpen, drawer, tour, panel };
   const selectRef = useRef<(object: Artifact, reveal?: boolean) => void>(() => undefined);
   const applyRef = useRef<(object: Artifact, reveal?: boolean) => void>(() => undefined);
   // setSearchParams changes identity with the query string, which would restart the tour on every hop.
@@ -93,6 +140,10 @@ function Explorer({ planet }: { planet: PlanetId }) {
         }
         if (layer.current.tour) {
           setTour(false);
+          return;
+        }
+        if (layer.current.panel) {
+          setPanel(null);
           return;
         }
         if (layer.current.drawer) {
@@ -126,11 +177,36 @@ function Explorer({ planet }: { planet: PlanetId }) {
       .sort((a, b) => arrivalOf(a).localeCompare(arrivalOf(b)) || a.id.localeCompare(b.id));
   }, [planet]);
   const selected = catalog.objects.find((object) => object.id === selectedId && object.planet === planet) ?? null;
-  const markers = selected && !filtered.some((object) => object.id === selected.id) ? [...filtered, selected] : filtered;
+  const missionFocus = searchParams.get("mission");
+  const missionMembers = missionFocus
+    ? catalog.objects.filter((object) => object.planet === planet && object.missionId === missionFocus)
+    : [];
+  const markers = [...filtered];
+  for (const object of [selected, ...missionMembers]) {
+    if (object && !markers.some((item) => item.id === object.id)) markers.push(object);
+  }
   const planetTotal = catalog.objects.filter((object) => object.planet === planet).length;
   const events = catalog.events.filter((event) => catalog.objects.find((object) => object.id === event.objectId)?.planet === planet);
 
-  const applySelection = (object: Artifact, reveal = true) => {
+  const discovered = Object.keys(progress.records);
+  const expedition = progress.expeditions[planet] ?? null;
+
+  const revise = (recipe: (current: ExplorationSave) => ExplorationSave) => {
+    setProgress((current) => {
+      const next = recipe(current);
+      if (next === current) return current;
+      writeExploration(next);
+      return next;
+    });
+  };
+
+  const remember = (ids: string[]) => {
+    revise((current) => markDiscovered(current, ids, new Date().toISOString()));
+  };
+
+  const applySelection = (object: Artifact, reveal = true, missionId?: string) => {
+    remember([object.id]);
+    if (!reduced) setFlight("locating");
     if (reveal) {
       const arrival = yearOf(missionById(catalog.missions, object.missionId)?.arrivalDate) ?? filters.throughYear;
       setFilters((current) => ({
@@ -143,16 +219,20 @@ function Explorer({ planet }: { planet: PlanetId }) {
     }
     setFocusNonce((value) => value + 1);
     setDrawer(null);
+    const mission = missionId ?? searchParams.get("mission");
+    const keepMission = mission && mission === object.missionId ? mission : null;
     if (object.planet !== planet) {
       navigate(`/explore/${object.planet}?object=${object.id}`);
       return;
     }
-    setSearchParams({ object: object.id }, { replace: true });
+    const next: Record<string, string> = { object: object.id };
+    if (keepMission) next.mission = keepMission;
+    setSearchParams(next, { replace: true });
   };
 
-  const selectObject = (object: Artifact, reveal = true) => {
+  const selectObject = (object: Artifact, reveal = true, missionId?: string) => {
     setTour(false);
-    applySelection(object, reveal);
+    applySelection(object, reveal, missionId);
   };
 
   const openEvent = (event: TimelineEvent) => {
@@ -166,9 +246,13 @@ function Explorer({ planet }: { planet: PlanetId }) {
 
   const closeStory = () => {
     setTour(false);
+    setFlight("idle");
     if (!selectedIdRef.current) return;
     setSearchParams({}, { replace: true });
   };
+
+  const locale = lang === "bn" ? "bn-BD" : "en-GB";
+  const countText = (count: number) => count.toLocaleString(locale);
 
   applyRef.current = applySelection;
 
@@ -225,11 +309,207 @@ function Explorer({ planet }: { planet: PlanetId }) {
   const yearMax = years.length > 0 ? Math.max(...years) : bounds.max;
   const listVisible = drawer === "list";
   const timelineVisible = drawer === "timeline";
-  const showDock = desktop || !selected;
+  const storyReady = Boolean(selected) && (!webgl || reduced || flight === "idle");
+
+  useEffect(() => {
+    if (!storyReady || !selectedId) return;
+    setProgress((current) => {
+      const next = markExplored(current, selectedId, new Date().toISOString());
+      if (next === current) return current;
+      writeExploration(next);
+      return next;
+    });
+  }, [storyReady, selectedId]);
+  const showDock = desktop || !storyReady;
+  const nearby = useMemo(() => {
+    if (!selected) return [];
+    return catalog.objects
+      .filter((object) => object.planet === selected.planet && object.id !== selected.id)
+      .map((object) => ({
+        object,
+        km: surfaceDistanceKm(
+          selected.planet,
+          selected.location.latitude,
+          selected.location.longitude,
+          object.location.latitude,
+          object.location.longitude,
+        ),
+      }))
+      .sort((a, b) => a.km - b.km)
+      .slice(0, 4)
+      .map(({ object, km }) => ({
+        id: object.id,
+        name: object.name[lang],
+        distance: formatDistanceKm(km, lang, t.kilometers),
+      }));
+  }, [selected, lang, t.kilometers]);
+  const viewTitle =
+    (view.level === "artifact" || view.level === "site") && selected
+      ? selected.name[lang]
+      : view.level === "region" && selected?.location.region
+        ? selected.location.region
+        : t[planet];
+  const viewNote =
+    view.level === "artifact" && selected
+      ? t.typeLabels[selected.type]
+      : view.level === "global"
+        ? `${countText(planetTotal)} ${t.objects}`
+        : fillCopy(t.inView, { count: countText(view.inView) });
+  const viewKicker = { global: t.viewGlobal, region: t.viewRegion, site: t.viewSite, artifact: t.viewArtifact }[view.level];
+
+  const changeExpedition = (next: Expedition | null) => {
+    revise((current) => {
+      const expeditions = { ...current.expeditions };
+      if (!next || next.artifactIds.length === 0) delete expeditions[planet];
+      else expeditions[planet] = next;
+      return { ...current, expeditions };
+    });
+  };
+
+  const discoverSite = () => {
+    if (seeking) return;
+    const choice = pickDiscovery(
+      catalog.objects.map((object) => ({ id: object.id, planet: object.planet, missionId: object.missionId, hasImage: object.images.length > 0 })),
+      planet,
+      progress.records,
+      selected?.id ?? null,
+      seekTurn.current,
+    );
+    seekTurn.current += 1;
+    if (!choice) {
+      setArchiveFull(true);
+      setPanel("log");
+      return;
+    }
+    const object = catalog.objects.find((item) => item.id === choice);
+    if (!object) return;
+    setArchiveFull(false);
+    setPanel(null);
+    const go = () => {
+      setSeeking(false);
+      selectObject(object, false);
+    };
+    if (reduced) go();
+    else {
+      setSeeking(true);
+      window.setTimeout(go, 700);
+    }
+  };
+
+  const runScan = () => {
+    setScanning(true);
+    const ids = sitesFacing(
+      catalog.objects.map((object) => ({
+        id: object.id,
+        planet: object.planet,
+        latitude: object.location.latitude,
+        longitude: object.location.longitude,
+      })),
+      planet,
+      view.latitude,
+      view.longitude,
+      scanAngle(view.distance),
+    );
+    const finish = () => {
+      setScanning(false);
+      remember(ids);
+      setScanIds(ids);
+      setPanel("scan");
+    };
+    if (reduced) finish();
+    else window.setTimeout(finish, 900);
+  };
+
+  const openRecorded = (id: string) => {
+    const object = catalog.objects.find((item) => item.id === id);
+    if (!object) return;
+    setPanel(null);
+    if (object.planet !== planet) {
+      navigate(`/explore/${object.planet}?object=${object.id}`);
+      return;
+    }
+    selectObject(object, false);
+  };
 
   const toggleDrawer = (nextDrawer: "list" | "timeline") => {
     setDrawer((current) => (current === nextDrawer ? null : nextDrawer));
   };
+
+  const named = (id: string) => catalog.objects.find((object) => object.id === id);
+  const worlds = (["moon", "mars"] as const).map((world) => {
+    const objects = catalog.objects.filter((object) => object.planet === world);
+    const found = objects.filter((object) => progress.records[object.id]);
+    return {
+      planet: world,
+      total: objects.length,
+      found: found.length,
+      explored: found.filter((object) => progress.records[object.id]?.exploredAt).length,
+      missions: new Set(found.map((object) => object.missionId)).size,
+      rovers: found.filter((object) => object.type === "rover").length,
+    };
+  });
+  const logEntries = catalog.objects.flatMap((object) => {
+    const record = progress.records[object.id];
+    if (!record) return [];
+    const mission = missionById(catalog.missions, object.missionId);
+    return [{
+      id: object.id,
+      name: object.name[lang],
+      planet: object.planet,
+      type: object.type,
+      typeLabel: t.typeLabels[object.type],
+      mission: mission?.name[lang] ?? object.missionId,
+      discoveredAt: record.discoveredAt,
+      explored: Boolean(record.exploredAt),
+    }];
+  });
+  const scanSites = (scanIds ?? []).flatMap((id) => {
+    const object = named(id);
+    return object ? [{ id, name: object.name[lang], missionId: object.missionId }] : [];
+  });
+  const scanMissions = [...new Set(scanSites.map((site) => site.missionId))];
+  const repeatedMission = scanSites.length > 1 && scanMissions.length === 1 ? scanMissions[0] : null;
+  const minimapMarks = catalog.objects.flatMap((object) => {
+    if (object.planet !== planet) return [];
+    const stops = expedition?.artifactIds ?? [];
+    const stopIndex = stops.indexOf(object.id);
+    const known = Boolean(progress.records[object.id]);
+    if (!known && stopIndex < 0 && object.id !== selected?.id) return [];
+    const role =
+      object.id === selected?.id
+        ? "selected"
+        : expedition?.status === "active" && stopIndex === expedition.currentIndex
+          ? "current"
+          : stopIndex >= 0 && (expedition?.status === "completed" || (expedition?.status === "active" && stopIndex < (expedition?.currentIndex ?? 0)))
+            ? "done"
+            : stopIndex >= 0
+              ? "planned"
+              : "discovered";
+    return [{ id: object.id, latitude: object.location.latitude, longitude: object.location.longitude, role }] as const;
+  });
+  const expeditionSites = (expedition?.artifactIds ?? []).flatMap((id) => {
+    const object = named(id);
+    return object ? [{ id, name: object.name[lang] }] : [];
+  });
+  const visitedObjects = (expedition?.artifactIds ?? []).flatMap((id) => {
+    const object = named(id);
+    return object ? [object] : [];
+  });
+  const spanYears = visitedObjects.flatMap((object) => {
+    const mission = missionById(catalog.missions, object.missionId);
+    return [yearOf(mission?.arrivalDate), yearOf(mission?.endDate)].filter((year): year is number => year !== null);
+  });
+  const expeditionSummary = expedition?.status === "completed"
+    ? {
+        visited: `${t.sitesVisited}: ${visitedObjects.length}`,
+        missions: `${t.missionsEncountered}: ${new Set(visitedObjects.map((object) => object.missionId)).size}`,
+        explored: `${t.artifactsExplored}: ${visitedObjects.filter((object) => progress.records[object.id]?.exploredAt).length}`,
+        span: spanYears.length > 0 ? `${t.timelineSpan}: ${Math.min(...spanYears)}–${Math.max(...spanYears)}` : undefined,
+      }
+    : null;
+  const panelClass = desktop
+    ? "pointer-events-auto absolute top-36 left-3 z-30 max-h-[min(54dvh,520px)] w-[min(340px,calc(100%-1.5rem))] overflow-auto rounded-3xl border border-white/15 bg-[#070d1c]/88 p-4 shadow-2xl"
+    : "pointer-events-auto absolute inset-x-3 top-16 bottom-3 z-40 overflow-auto rounded-3xl border border-white/15 bg-[#070d1c]/94 p-4";
 
   const toggleFullscreen = () => {
     if (document.fullscreenElement) void document.exitFullscreen();
@@ -252,6 +532,31 @@ function Explorer({ planet }: { planet: PlanetId }) {
           loadingLabel={t.loadingSurface}
           clusterHint={t.clusterChoose}
           labelFor={(object) => object.name[lang]}
+          captionFor={(object) => {
+            const year = yearOf(missionById(catalog.missions, object.missionId)?.arrivalDate);
+            return {
+              type: t.typeLabels[object.type],
+              place: object.location.region ?? object.location.locationName,
+              year: year ? year.toLocaleString(locale, { useGrouping: false }) : "",
+            };
+          }}
+          discovery={discovery}
+          discoveredIds={discovered}
+          onDiscover={(ids) => {
+            remember(ids);
+            const found = catalog.objects.find((item) => item.id === ids[0]);
+            if (!found) return;
+            setNotice(found.name[lang]);
+            if (noticeTimer.current) window.clearTimeout(noticeTimer.current);
+            noticeTimer.current = window.setTimeout(() => setNotice(null), 2200);
+          }}
+          onView={setView}
+          missionIds={
+            selected && missionMembers.some((object) => object.id === selected.id)
+              ? [selected.id, ...missionMembers.filter((object) => object.id !== selected.id).map((object) => object.id)]
+              : missionMembers.map((object) => object.id)
+          }
+          onFlight={setFlight}
           onSelect={(id) => {
             const object = catalog.objects.find((item) => item.id === id);
             if (object) selectObject(object, false);
@@ -261,10 +566,142 @@ function Explorer({ planet }: { planet: PlanetId }) {
         />
       </div>
       <div
-        className={`pointer-events-none absolute inset-x-0 top-16 bottom-0 z-10 bg-[radial-gradient(circle_at_center,transparent_16%,rgba(0,0,0,0.58)_78%)] transition-opacity duration-700 ${selected ? "opacity-100" : "opacity-0"}`}
+        className={`pointer-events-none absolute inset-x-0 top-16 bottom-0 z-10 bg-[radial-gradient(circle_at_center,transparent_16%,rgba(0,0,0,0.58)_78%)] transition-opacity duration-700 ${storyReady ? "opacity-100" : "opacity-0"}`}
       />
       <TopBar planet={planet} onPlanet={switchPlanet} dimmed={Boolean(selected)} onHelp={() => setHelpOpen(true)} onFullscreen={toggleFullscreen} />
-      <div className={`pointer-events-none absolute inset-x-0 top-16 bottom-0 z-20 transition-opacity duration-500 ${selected ? "opacity-60" : ""}`}>
+      {!listVisible && (
+        <div className="pointer-events-none absolute top-20 left-3 z-30 max-w-[14rem]">
+          <p className="text-[10px] tracking-[0.18em] text-[#f2a64a] uppercase">{viewKicker}</p>
+          <p className="text-sm text-[#f4f7ff]">{viewTitle}</p>
+          <p className="text-xs text-[#93a6c9]">{viewNote}</p>
+          {notice && (
+            <div className="mt-3">
+              <p className="text-[10px] tracking-[0.16em] text-[#6aa4ff] uppercase">{t.siteDetected}</p>
+              <p className="text-sm text-[#f4f7ff]">{notice}</p>
+            </div>
+          )}
+          <div className="pointer-events-auto mt-3 flex flex-wrap gap-1">
+            <ToolButton label={seeking ? t.searchingArchive : selected ? t.discoverAnother : t.discoverSomething} onClick={discoverSite} />
+            <ToolButton label={scanning ? t.scanningSurface : t.scanSurface} onClick={runScan} />
+            <ToolButton label={t.explorerLog} pressed={panel === "log"} onClick={() => setPanel((current) => (current === "log" ? null : "log"))} />
+            <ToolButton label={t.myExpedition} pressed={panel === "expedition"} onClick={() => setPanel((current) => (current === "expedition" ? null : "expedition"))} />
+            <ToolButton label={mapOpen ? t.hideMap : t.showMap} pressed={mapOpen} onClick={() => setMapOpen((value) => !value)} />
+          </div>
+          {mapOpen && (
+            <div className="pointer-events-none mt-3">
+              <Minimap
+                planet={planet}
+                latitude={view.latitude}
+                longitude={view.longitude}
+                hereLabel={t.youAreHere}
+                label={`${t.minimapLabel}. ${viewTitle}.`}
+                marks={minimapMarks}
+              />
+            </div>
+          )}
+        </div>
+      )}
+      {panel && (
+        <div className={panelClass}>
+          {archiveFull && panel === "log" && (
+            <p className="mb-3 text-sm text-[#f4f7ff]">
+              <span className="block text-[11px] tracking-[0.16em] text-[#f2a64a] uppercase">{t.allSitesKnown}</span>
+              {t.allSitesKnownBody}
+            </p>
+          )}
+          {panel === "log" && (
+            <ExplorerLog
+              title={t.explorerLog}
+              entries={logEntries}
+              worlds={worlds}
+              emptyLabel={t.logEmpty}
+              closeLabel={t.close}
+              allLabel={t.categoryAll}
+              planetLabels={{ moon: t.moon, mars: t.mars }}
+              discoveredLabel={t.discoveredOn}
+              exploredLabel={t.exploredWord}
+              notExploredLabel={t.notYetExplored}
+              progress={t.sitesProgress}
+              missionsLabel={t.missionsProgress}
+              exploredCountLabel={t.exploredProgress}
+              roversLabel={t.roversProgress}
+              lang={lang}
+              onSelect={openRecorded}
+              onClose={() => setPanel(null)}
+            />
+          )}
+          {panel === "expedition" && (
+            <ExpeditionPanel
+              title={t.myExpedition}
+              emptyLabel={t.noExpedition}
+              closeLabel={t.close}
+              startLabel={t.startExpedition}
+              nextLabel={t.nextSite}
+              completeLabel={t.expeditionComplete}
+              newLabel={t.newExpedition}
+              earlierLabel={t.moveEarlier}
+              laterLabel={t.moveLater}
+              removeLabel={t.removeFromExpedition}
+              stepLabel={expedition ? fillCopy(t.expeditionStep, { index: expedition.currentIndex + 1, total: expedition.artifactIds.length }) : ""}
+              sites={expeditionSites}
+              expedition={expedition}
+              summary={expeditionSummary}
+              onOpen={openRecorded}
+              onStart={() => {
+                if (!expedition || expedition.artifactIds.length === 0) return;
+                setTour(false);
+                changeExpedition({ ...expedition, status: "active", currentIndex: 0 });
+                const object = named(expedition.artifactIds[0]);
+                if (object) selectObject(object, false);
+              }}
+              onNext={() => {
+                if (!expedition || expedition.status !== "active") return;
+                const index = expedition.currentIndex + 1;
+                if (index >= expedition.artifactIds.length) {
+                  changeExpedition({ ...expedition, status: "completed" });
+                  return;
+                }
+                changeExpedition({ ...expedition, currentIndex: index });
+                const object = named(expedition.artifactIds[index]);
+                if (object) selectObject(object, false);
+              }}
+              onMove={(id, direction) => expedition && changeExpedition(moveExpeditionSite(expedition, id, direction))}
+              onRemove={(id) => changeExpedition(toggleExpeditionSite(expedition ?? undefined, id))}
+              onClear={() => changeExpedition(null)}
+              onClose={() => setPanel(null)}
+            />
+          )}
+          {panel === "scan" && (
+            <ScanPanel
+              title={t.scanResults}
+              countLabel={scanSites.length > 0 ? fillCopy(t.sitesDetected, { count: scanSites.length }) : null}
+              emptyLabel={t.noScanHits}
+              closeLabel={t.close}
+              missionLabel={repeatedMission ? t.showMissionLinks : null}
+              sites={scanSites}
+              onSelect={openRecorded}
+              onMission={
+                repeatedMission
+                  ? () => {
+                      const object = catalog.objects.find((item) => item.id === scanSites[0]?.id);
+                      if (!object) return;
+                      selectObject(object, false, repeatedMission);
+                      setPanel(null);
+                    }
+                  : null
+              }
+              onClose={() => setPanel(null)}
+            />
+          )}
+        </div>
+      )}
+      {scanning && <div className="scan-ring pointer-events-none absolute top-1/2 left-1/2 z-30 h-72 w-72 -translate-x-1/2 -translate-y-1/2 rounded-full border border-[#6aa4ff]/70" aria-hidden="true" />}
+      {(seeking || (selected && flight !== "idle")) && (
+        <p className="pointer-events-none absolute bottom-24 left-1/2 z-30 -translate-x-1/2 text-[11px] tracking-[0.22em] text-[#f2a64a] uppercase">
+          {seeking ? t.searchingArchive : flight === "locating" ? t.locatingSite : t.targetAcquired}
+        </p>
+      )}
+      <div className={`pointer-events-none absolute inset-x-0 top-16 bottom-0 z-20 transition-opacity duration-500 ${storyReady ? "opacity-60" : ""}`}>
         <div className="pointer-events-auto absolute top-3 right-3">
           <SearchBox objects={catalog.objects} missions={catalog.missions} onSelect={(object) => selectObject(object)} />
         </div>
@@ -291,13 +728,13 @@ function Explorer({ planet }: { planet: PlanetId }) {
         </div>
         {showDock && (
           <div className={`pointer-events-auto absolute bottom-3 left-3 flex flex-col gap-2 ${selected && desktop ? "right-[27rem]" : "right-3"}`}>
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   aria-pressed={drawer === "list"}
                   onClick={() => toggleDrawer("list")}
-                  className={`rounded-full border px-3 py-2 text-sm ${drawer === "list" ? "border-[#e39a62] bg-[#e39a62]/15" : "border-white/15 bg-black/70"}`}
+                  className={`rounded-full border px-3 py-2 text-sm ${drawer === "list" ? "border-[#6aa4ff] bg-[#6aa4ff]/15" : "border-white/15 bg-black/70"}`}
                 >
                   {t.objects}
                 </button>
@@ -305,9 +742,17 @@ function Explorer({ planet }: { planet: PlanetId }) {
                   type="button"
                   aria-pressed={tour}
                   onClick={toggleTour}
-                  className={`rounded-full border px-3 py-2 text-sm ${tour ? "border-[#e39a62] bg-[#e39a62]/15 text-[#e39a62]" : "border-white/15 bg-black/70"}`}
+                  className={`rounded-full border px-3 py-2 text-sm ${tour ? "border-[#6aa4ff] bg-[#6aa4ff]/15 text-[#6aa4ff]" : "border-white/15 bg-black/70"}`}
                 >
                   {tour ? t.stopTour : t.tour}
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={discovery}
+                  onClick={() => setDiscovery((value) => !value)}
+                  className={`rounded-full border px-3 py-2 text-sm ${discovery ? "border-[#6aa4ff] bg-[#6aa4ff]/15 text-[#6aa4ff]" : "border-white/15 bg-black/70"}`}
+                >
+                  {discovery ? t.discovery : t.showAllSites}
                 </button>
               </div>
               {webgl && (
@@ -333,12 +778,12 @@ function Explorer({ planet }: { planet: PlanetId }) {
               aria-expanded={timelineVisible}
               aria-label={t.timeline}
               onClick={() => toggleDrawer("timeline")}
-              className={`flex h-9 items-center gap-3 rounded-full border px-4 text-xs tracking-[0.14em] ${timelineVisible ? "border-[#e39a62] bg-[#e39a62]/15 text-[#e39a62]" : "border-white/10 bg-[#090b10]/80 text-[#e39a62]"}`}
+              className={`flex h-9 items-center gap-3 rounded-full border px-4 text-xs tracking-[0.14em] ${timelineVisible ? "border-[#f2a64a] bg-[#f2a64a]/15 text-[#f2a64a]" : "border-white/10 bg-[#070d1c]/80 text-[#f2a64a]"}`}
             >
               <span>{yearMin}</span>
-              <span className="h-px flex-1 bg-[#e39a62]/70" />
+              <span className="h-px flex-1 bg-[#f2a64a]/70" />
               <span className="uppercase">{t.timeline}</span>
-              <span className="h-px flex-1 bg-[#e39a62]/70" />
+              <span className="h-px flex-1 bg-[#f2a64a]/70" />
               <span>{yearMax}</span>
             </button>
           </div>
@@ -349,7 +794,7 @@ function Explorer({ planet }: { planet: PlanetId }) {
               <button
                 type="button"
                 onClick={toggleTour}
-                className="rounded-full border border-[#e39a62] bg-[#e39a62]/15 px-3 py-2 text-sm text-[#e39a62]"
+                className="rounded-full border border-[#6aa4ff] bg-[#6aa4ff]/15 px-3 py-2 text-sm text-[#6aa4ff]"
               >
                 {t.stopTour}
               </button>
@@ -373,7 +818,7 @@ function Explorer({ planet }: { planet: PlanetId }) {
           </div>
         )}
       </div>
-      {selected && (
+      {storyReady && selected && (
         <StoryPanel
           object={selected}
           missions={catalog.missions}
@@ -383,24 +828,51 @@ function Explorer({ planet }: { planet: PlanetId }) {
           onClose={closeStory}
           onPrevious={previous ? () => selectObject(previous, false) : null}
           onNext={next ? () => selectObject(next, false) : null}
+          nearby={nearby}
+          onNearby={(id) => {
+            const object = catalog.objects.find((item) => item.id === id);
+            if (object) selectObject(object, false);
+          }}
+          events={catalog.events}
+          missionOpen={missionFocus === selected.missionId}
+          siblings={catalog.objects
+            .filter((object) => object.planet === selected.planet && object.missionId === selected.missionId)
+            .map((object) => ({ id: object.id, name: object.name[lang] }))}
+          hasTraverse={roverRoutes.some((route) => route.roverId === selected.id && route.points.length > 1)}
+          onExploreMission={() => setSearchParams({ object: selected.id, mission: selected.missionId }, { replace: true })}
+          onLeaveMission={() => setSearchParams({ object: selected.id }, { replace: true })}
+          onEvent={(event) => {
+            const object = catalog.objects.find((item) => item.id === event.objectId);
+            if (object && object.id !== selected.id) selectObject(object, false);
+          }}
+          inExpedition={Boolean(expedition?.artifactIds.includes(selected.id))}
+          onToggleExpedition={() => changeExpedition(toggleExpeditionSite(expedition ?? undefined, selected.id))}
         />
       )}
       <div className={`absolute inset-0 z-[70] bg-black transition-opacity duration-200 ${veil ? "opacity-100" : "pointer-events-none opacity-0"}`} />
       {helpOpen && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" onClick={() => setHelpOpen(false)}>
-          <div className="max-w-md rounded-3xl border border-white/10 bg-[#12151c] p-6" role="dialog" aria-labelledby="help-title" onClick={(event) => event.stopPropagation()}>
+          <div className="max-w-md rounded-3xl border border-white/10 bg-[#10182e] p-6" role="dialog" aria-labelledby="help-title" onClick={(event) => event.stopPropagation()}>
             <h2 id="help-title" className="font-display text-3xl">
               {t.helpTitle}
             </h2>
-            <p className="mt-3 text-sm leading-6 text-[#d9d2c6]">{t.howToBody}</p>
-            {reduced && <p className="mt-3 text-sm text-[#e39a62]">{t.reducedMotion}</p>}
-            <button type="button" className="mt-5 rounded-full bg-[#f3efe6] px-4 py-2 text-sm text-[#1a140f]" onClick={() => setHelpOpen(false)}>
+            <p className="mt-3 text-sm leading-6 text-[#c5d2ea]">{t.howToBody}</p>
+            {reduced && <p className="mt-3 text-sm text-[#6aa4ff]">{t.reducedMotion}</p>}
+            <button type="button" className="mt-5 rounded-full bg-[#3d7eff] px-4 py-2 text-sm text-[#f4f7ff]" onClick={() => setHelpOpen(false)}>
               {t.close}
             </button>
           </div>
         </div>
       )}
     </div>
+  );
+}
+
+function ToolButton({ label, onClick, pressed }: { label: string; onClick: () => void; pressed?: boolean }) {
+  return (
+    <button type="button" aria-pressed={pressed} onClick={onClick} className={`rounded-full border px-2.5 py-1 text-[11px] ${pressed ? "border-[#6aa4ff] text-[#6aa4ff]" : "border-white/15 bg-black/70 text-[#f4f7ff]"}`}>
+      {label}
+    </button>
   );
 }
 
@@ -461,7 +933,7 @@ function ClusterButton({
       title={label}
       aria-pressed={pressed}
       onClick={onClick}
-      className={`grid h-9 w-9 place-items-center text-sm ${pressed ? "text-[#e39a62]" : "text-[#f3efe6]"}`}
+      className={`grid h-9 w-9 place-items-center text-sm ${pressed ? "text-[#6aa4ff]" : "text-[#f4f7ff]"}`}
     >
       {children}
     </button>

@@ -35,6 +35,15 @@ export function latLonToVector(latitudeDeg: number, longitudeDeg: number, radius
   };
 }
 
+export function vectorToLatLon(x: number, y: number, z: number): { latitude: number; longitude: number } {
+  const radius = Math.hypot(x, y, z) || 1;
+  const latitude = (Math.asin(Math.min(1, Math.max(-1, y / radius))) * 180) / Math.PI;
+  let longitude = (Math.atan2(-z, x) * 180) / Math.PI - TEXTURE_LON_OFFSET_DEG;
+  if (longitude > 180) longitude -= 360;
+  if (longitude < -180) longitude += 360;
+  return { latitude, longitude };
+}
+
 export function formatCoordinate(latitude: number, longitude: number): string {
   const latHem = latitude >= 0 ? "N" : "S";
   const lonHem = longitude >= 0 ? "E" : "W";
