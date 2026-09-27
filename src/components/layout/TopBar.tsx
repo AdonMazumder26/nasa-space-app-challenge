@@ -23,9 +23,9 @@ export function TopBar({ planet, onPlanet, onHelp, onFullscreen, focus, search, 
   }, [focus?.active]);
   const focused = Boolean(focus?.active);
   return (
-    <header className="relative z-30 flex h-16 items-center bg-transparent px-3 sm:px-5">
+    <header className="relative z-30 flex h-16 items-center bg-transparent px-2 sm:px-5">
       <Link to="/" className="flex w-fit items-center gap-2" aria-label={t.appTitle}>
-        <img src="/cosmoverse-logo.jpg" alt="" className="h-12 w-12 rounded-full object-cover ring-1 ring-white/30 shadow-[0_0_28px_rgb(106_164_255_/_0.45)]" />
+        <img src="/cosmoverse-logo.jpg" alt="" className="h-10 w-10 rounded-full object-cover ring-1 ring-white/30 shadow-[0_0_28px_rgb(106_164_255_/_0.45)] sm:h-12 sm:w-12" />
       </Link>
       {planet && onPlanet && (
         <div className="absolute top-[4.25rem] left-3 flex items-center rounded-full border border-white/15 bg-black/45 p-1 shadow-lg backdrop-blur-sm sm:top-auto sm:left-1/2 sm:-translate-x-1/2" role="group" aria-label={t.explore}>
@@ -44,17 +44,17 @@ export function TopBar({ planet, onPlanet, onHelp, onFullscreen, focus, search, 
           ))}
         </div>
       )}
-      <div className="ml-auto flex items-center gap-2">
+      <div className="ml-auto flex min-w-0 items-center gap-1 sm:gap-2">
         {search}
         {sound && (
-          <div className="flex items-center gap-1 rounded-full border border-white/10 bg-black/25 p-0.5 backdrop-blur-sm">
+          <div className="flex items-center gap-0.5 rounded-full border border-white/10 bg-black/25 p-0.5 backdrop-blur-sm sm:gap-1">
             <NavIcon label={sound.failed ? t.audioUnavailable : sound.enabled ? t.soundOn : t.soundOff} pressed={sound.enabled} onClick={sound.onToggle}>
               {sound.enabled ? <LuVolume2 aria-hidden="true" /> : <LuVolumeX aria-hidden="true" />}
             </NavIcon>
             {sound.enabled && !sound.failed && (
               <input
                 type="range"
-                className="h-1 w-16 accent-[#6aa4ff] sm:w-20"
+                className="h-1 w-12 accent-[#6aa4ff] sm:w-20"
                 min={0}
                 max={1}
                 step={0.05}

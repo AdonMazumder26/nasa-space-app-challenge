@@ -567,7 +567,7 @@ function Explorer({ planet }: { planet: PlanetId }) {
         </button>
       )}
       {!listVisible && !focusMode && (
-        <div className="pointer-events-none absolute top-20 left-3 z-30 max-w-[14rem]">
+        <div className="pointer-events-none absolute top-32 left-3 z-30 max-w-[calc(100%-1.5rem)] sm:top-20 sm:max-w-[14rem]">
           <p className="text-[10px] tracking-[0.18em] text-[#f2a64a] uppercase">{viewKicker}</p>
           <p className="text-sm text-[#f4f7ff]">{viewTitle}</p>
           <p className="text-xs text-[#93a6c9]">{viewNote}</p>
@@ -670,7 +670,7 @@ function Explorer({ planet }: { planet: PlanetId }) {
       <div inert={focusMode ? true : undefined} className={`pointer-events-none absolute inset-x-0 top-16 bottom-0 z-20 transition-opacity duration-500 ${focusMode ? "opacity-0" : storyReady ? "opacity-60" : ""}`}>
         <div
           inert={listVisible ? undefined : true}
-          className={`pointer-events-auto absolute bottom-36 left-3 flex transition duration-500 ${desktop ? "top-16 w-[min(340px,calc(100%-1.5rem))]" : "top-14 right-3"} ${listVisible ? "translate-x-0 opacity-100" : "pointer-events-none -translate-x-[120%] opacity-0"
+          className={`pointer-events-auto absolute bottom-36 left-3 flex transition duration-500 ${desktop ? "top-16 w-[min(340px,calc(100%-1.5rem))]" : "top-14 w-[calc(100%-1.5rem)]"} ${listVisible ? "translate-x-0 opacity-100" : "pointer-events-none -translate-x-[120%] opacity-0"
             }`}
         >
           <ObjectList
@@ -690,7 +690,7 @@ function Explorer({ planet }: { planet: PlanetId }) {
           />
         </div>
         {webgl && (
-          <div className={`pointer-events-auto absolute left-3 z-30 ${desktop ? "bottom-19" : selected ? "bottom-[calc(72dvh+1rem)]" : "bottom-19"}`}>
+          <div className={`pointer-events-auto absolute left-3 z-30 ${desktop ? "bottom-19" : selected ? "bottom-[calc(78dvh+1rem)]" : "bottom-19"}`}>
             <CameraCluster
               zoomInLabel={t.zoomIn}
               zoomOutLabel={t.zoomOut}

@@ -1,7 +1,7 @@
 export type SoundPref = { enabled: boolean; volume: number };
 
 const STORAGE_KEY = "abnf-sound";
-const DEFAULT_PREF: SoundPref = { enabled: true, volume: 0.35 };
+const DEFAULT_PREF: SoundPref = { enabled: true, volume: 0.55 };
 
 export function parseSoundPref(raw: string | null): SoundPref {
   if (!raw) return { ...DEFAULT_PREF };
@@ -50,7 +50,7 @@ function fileBed(ctx: AudioContext, master: GainNode): Bed | null {
   source.connect(gain);
   gain.connect(master);
   void audio.play().catch(() => undefined);
-  gain.gain.linearRampToValueAtTime(0.28, ctx.currentTime + 0.8);
+  gain.gain.linearRampToValueAtTime(0.5, ctx.currentTime + 0.8);
   return {
     stop() {
       gain.gain.cancelScheduledValues(ctx.currentTime);

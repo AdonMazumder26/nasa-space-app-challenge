@@ -83,7 +83,7 @@ export function StoryPanel({
       : { initial: { x: 28, opacity: 0 }, animate: { x: 0, opacity: 1 } };
 
   return (
-    <div className={`pointer-events-none absolute inset-x-0 top-16 bottom-0 z-40 flex p-4 ${mobile ? "items-end pb-2" : "items-center justify-end pb-20"}`}>
+    <div className={`pointer-events-none absolute inset-x-0 top-16 bottom-0 z-40 flex p-2 sm:p-4 ${mobile ? "items-end pb-2" : "items-center justify-end pb-20"}`}>
       <motion.aside
         {...motionProps}
         key={object.id}
@@ -92,7 +92,7 @@ export function StoryPanel({
         aria-labelledby="story-title"
         className={
           mobile
-            ? `pointer-events-auto w-full overflow-auto rounded-t-3xl border border-white/15 bg-[#070d1c]/88 shadow-2xl backdrop-blur-xl ${sheet === "peek" ? "max-h-[8.5rem]" : "max-h-[min(72dvh,640px)]"}`
+            ? `pointer-events-auto w-full overflow-auto rounded-t-3xl border border-white/15 bg-[#070d1c]/88 shadow-2xl backdrop-blur-xl ${sheet === "peek" ? "max-h-[8.5rem]" : "max-h-[min(78dvh,680px)]"}`
             : "pointer-events-auto max-h-[min(68dvh,680px)] w-[min(400px,calc(100%-2rem))] overflow-auto rounded-3xl border border-white/15 bg-[#070d1c]/55 shadow-2xl backdrop-blur-xl"
         }
       >
@@ -107,13 +107,13 @@ export function StoryPanel({
             {sheet === "open" ? t.collapseStory : t.expandStory}
           </button>
         )}
-        <div className="sticky top-0 z-10 flex items-start gap-2 border-b border-white/10 bg-[#070d1c]/55 px-4 py-3 backdrop-blur-md">
-          <button type="button" onClick={onPrevious ?? undefined} disabled={!onPrevious} aria-label={t.previousObject} className="rounded-full border border-white/15 p-2 disabled:opacity-30">
+        <div className="sticky top-0 z-10 flex items-start gap-1.5 border-b border-white/10 bg-[#070d1c]/55 px-3 py-2.5 backdrop-blur-md sm:gap-2 sm:px-4 sm:py-3">
+          <button type="button" onClick={onPrevious ?? undefined} disabled={!onPrevious} aria-label={t.previousObject} className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-white/15 p-2 disabled:opacity-30">
             <LuChevronLeft />
           </button>
           <div className="min-w-0 flex-1">
             <p className="text-[11px] tracking-[0.18em] text-[#f2a64a] uppercase">{t.typeLabels[object.type]}</p>
-            <h2 id="story-title" className="font-display text-3xl leading-tight">
+            <h2 id="story-title" className="font-display text-2xl leading-tight sm:text-3xl">
               {object.name[lang]}
             </h2>
             <p className="mt-1 text-xs text-[#93a6c9]">
@@ -121,14 +121,14 @@ export function StoryPanel({
               {arrivalYear ? ` · ${arrivalYear.toLocaleString(lang === "bn" ? "bn-BD" : "en-GB", { useGrouping: false })}` : ""}
             </p>
           </div>
-          <button type="button" onClick={onNext ?? undefined} disabled={!onNext} aria-label={t.nextObject} className="rounded-full border border-white/15 p-2 disabled:opacity-30">
+          <button type="button" onClick={onNext ?? undefined} disabled={!onNext} aria-label={t.nextObject} className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-white/15 p-2 disabled:opacity-30">
             <LuChevronRight />
           </button>
           <button ref={closeRef} type="button" onClick={onClose} aria-label={t.clearSelection} className="rounded-full border border-white/15 p-2">
             <LuX />
           </button>
         </div>
-        <div className={`space-y-5 px-5 py-4 text-sm leading-6 ${mobile && sheet === "peek" ? "hidden" : ""}`}>
+        <div className={`space-y-5 px-4 py-4 text-sm leading-6 sm:px-5 ${mobile && sheet === "peek" ? "hidden" : ""}`}>
           <p className="text-base text-[#f4f7ff]">{object.summary[lang]}</p>
           <button type="button" onClick={onHear} className="min-h-11 rounded-full border border-[#f2a64a]/50 px-4 text-xs tracking-[0.12em] text-[#f2a64a] uppercase">
             {t.hearSite}

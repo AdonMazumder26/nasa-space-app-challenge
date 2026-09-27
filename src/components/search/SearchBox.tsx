@@ -45,7 +45,7 @@ export function SearchBox({ objects, missions, onSelect }: Props) {
         aria-label={t.searchLabel}
         title={t.searchLabel}
         onClick={() => setExpanded(true)}
-        className="grid h-11 w-11 place-items-center rounded-full border border-white/15 bg-black/25 text-[#f4f7ff] shadow-lg backdrop-blur-sm transition hover:border-[#6aa4ff]/60 hover:bg-black/45"
+        className="grid h-10 w-10 place-items-center rounded-full border border-white/15 bg-black/25 text-[#f4f7ff] shadow-lg backdrop-blur-sm transition hover:border-[#6aa4ff]/60 hover:bg-black/45 sm:h-11 sm:w-11"
       >
         <LuSearch />
       </button>
@@ -53,7 +53,7 @@ export function SearchBox({ objects, missions, onSelect }: Props) {
   }
 
   return (
-    <div ref={boxRef} className="relative w-[min(20rem,calc(100vw-7rem))] sm:w-72">
+    <div ref={boxRef} className="relative w-[min(16rem,calc(100vw-6.5rem))] sm:w-72">
       <label className="sr-only" htmlFor={`${listId}-input`}>
         {t.searchLabel}
       </label>
