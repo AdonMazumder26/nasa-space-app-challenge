@@ -45,7 +45,7 @@ export function SearchBox({ objects, missions, onSelect }: Props) {
         aria-label={t.searchLabel}
         title={t.searchLabel}
         onClick={() => setExpanded(true)}
-        className="grid h-10 w-10 place-items-center rounded-full border border-white/15 bg-black/70 text-[#f4f7ff]"
+        className="grid h-11 w-11 place-items-center rounded-full border border-white/15 bg-black/25 text-[#f4f7ff] shadow-lg backdrop-blur-sm transition hover:border-[#6aa4ff]/60 hover:bg-black/45"
       >
         <LuSearch />
       </button>
@@ -53,7 +53,7 @@ export function SearchBox({ objects, missions, onSelect }: Props) {
   }
 
   return (
-    <div ref={boxRef} className="relative w-[min(20rem,calc(100vw-2rem))]">
+    <div ref={boxRef} className="relative w-[min(20rem,calc(100vw-7rem))] sm:w-72">
       <label className="sr-only" htmlFor={`${listId}-input`}>
         {t.searchLabel}
       </label>
@@ -93,7 +93,7 @@ export function SearchBox({ objects, missions, onSelect }: Props) {
             setQuery("");
           }
         }}
-        className="w-full rounded-full border border-white/10 bg-black/40 py-2 pr-3 pl-10 text-sm outline-none placeholder:text-[#7d8eae]"
+        className="h-11 w-full rounded-full border border-[#6aa4ff]/45 bg-[#070d1c]/88 py-2 pr-3 pl-10 text-sm text-[#f4f7ff] shadow-lg outline-none placeholder:text-[#7d8eae] backdrop-blur-md"
       />
       {open && query.trim() && (
         <ul id={listId} role="listbox" className="absolute z-40 mt-2 max-h-80 w-full overflow-auto rounded-2xl border border-white/10 bg-[#10182e] p-1 shadow-2xl">

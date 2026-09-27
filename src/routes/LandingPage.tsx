@@ -1,15 +1,24 @@
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
+import { ArchiveIntro, markIntroSeen } from "../components/layout/ArchiveIntro";
 import { PlanetViewport, type SceneHandle } from "../components/planet/PlanetScene";
 import { TopBar } from "../components/layout/TopBar";
 import { useI18n } from "../features/localization/LanguageContext";
 import { usePrefersReducedMotion } from "../hooks/usePrefersReducedMotion";
+import { useSound } from "../hooks/useSound";
+import { soundscape } from "../lib/audio";
 
 export function LandingPage() {
   const { t, lang } = useI18n();
   const reduced = usePrefersReducedMotion();
+  const sound = useSound();
   const sceneRef = useRef<SceneHandle | null>(null);
+
+  useEffect(() => {
+    soundscape.setPlanet("moon");
+    return () => soundscape.setPlanet(null);
+  }, []);
 
   return (
     <div className="relative h-dvh overflow-hidden">
@@ -24,6 +33,8 @@ export function LandingPage() {
         reducedMotion={reduced}
         errorMessage={t.sceneError}
         loadingLabel={t.loadingSurface}
+        surfaceError={t.surfaceUnavailable}
+        retryLabel={t.retry}
         clusterHint={t.clusterChoose}
         labelFor={(object) => object.name[lang]}
         onSelect={() => undefined}
@@ -33,7 +44,7 @@ export function LandingPage() {
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_70%_40%,transparent_0%,rgba(7,13,28,0.2)_42%,rgba(7,13,28,0.88)_78%)]" />
       <div className="relative z-10 flex h-full flex-col">
         <div className="pointer-events-auto">
-          <TopBar />
+          <TopBar sound={{ enabled: sound.enabled, failed: sound.failed, volume: sound.volume, onToggle: sound.toggle, onVolume: sound.setVolume }} />
         </div>
         <main className="pointer-events-none flex flex-1 items-end px-5 pb-10 sm:px-10 sm:pb-16">
           <motion.div
@@ -47,10 +58,10 @@ export function LandingPage() {
             <p className="mt-5 text-lg text-[#f4f7ff]">{t.landingLead}</p>
             <p className="mt-3 max-w-lg text-sm leading-6 text-[#c5d2ea]">{t.landingBody}</p>
             <div className="pointer-events-auto mt-7 flex flex-wrap gap-3">
-              <Link to="/explore/moon" className="rounded-full bg-[#3d7eff] px-5 py-3 text-sm text-[#f4f7ff]">
+              <Link to="/explore/moon" onClick={markIntroSeen} className="min-h-11 rounded-full bg-[#3d7eff] px-5 py-3 text-sm text-[#f4f7ff]">
                 {t.enterMoon}
               </Link>
-              <Link to="/explore/mars" className="rounded-full border border-[#f2a64a] px-5 py-3 text-sm text-[#f4f7ff]">
+              <Link to="/explore/mars" onClick={markIntroSeen} className="min-h-11 rounded-full border border-[#f2a64a] px-5 py-3 text-sm text-[#f4f7ff]">
                 {t.enterMars}
               </Link>
             </div>
@@ -58,6 +69,8 @@ export function LandingPage() {
           </motion.div>
         </main>
       </div>
+      <ArchiveIntro />
+      {sound.failed && <p className="pointer-events-none absolute right-4 bottom-4 z-30 max-w-xs text-xs text-[#c5d2ea]">{t.audioUnavailable}</p>}
     </div>
   );
 }

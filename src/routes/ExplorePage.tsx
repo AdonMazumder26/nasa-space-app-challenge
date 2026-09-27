@@ -1,34 +1,31 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { LuBookOpen, LuCompass, LuMap, LuMenu, LuMinus, LuPlus, LuRoute, LuRotateCcw, LuScan, LuX } from "react-icons/lu";
+import { LuBookOpen, LuCompass, LuEye, LuList, LuMenu, LuMinus, LuPlay, LuPlus, LuRefreshCw, LuRotateCcw, LuX } from "react-icons/lu";
 import { ObjectList } from "../components/object/ObjectList";
 import { StoryPanel } from "../components/object/StoryPanel";
 import { PlanetViewport, webglAvailable, type SceneHandle } from "../components/planet/PlanetScene";
 import { SearchBox } from "../components/search/SearchBox";
 import { TimelineBar } from "../components/timeline/TimelineBar";
+import { MissionStatus } from "../components/layout/MissionStatus";
 import { TopBar } from "../components/layout/TopBar";
-import { ExpeditionPanel } from "../components/explore/ExpeditionPanel";
 import { ExplorerLog } from "../components/explore/ExplorerLog";
-import { Minimap } from "../components/explore/Minimap";
-import { ScanPanel } from "../components/explore/ScanPanel";
 import { catalog } from "../data/catalog";
 import { roverRoutes } from "../data/roverRoutes";
 import { useI18n } from "../features/localization/LanguageContext";
 import { fillCopy } from "../features/localization/strings";
 import { useMinWidth, usePrefersReducedMotion } from "../hooks/usePrefersReducedMotion";
+import { useSound } from "../hooks/useSound";
+import { soundscape } from "../lib/audio";
+import { speakCatalogLine, stopNarration } from "../lib/narration";
+import { transitionMs } from "../lib/transitions";
 import { yearOf } from "../lib/coordinates/latLon";
 import { formatDistanceKm, surfaceDistanceKm } from "../lib/coordinates/distance";
 import {
   markDiscovered,
   markExplored,
-  moveExpeditionSite,
   pickDiscovery,
   readExploration,
-  scanAngle,
-  sitesFacing,
-  toggleExpeditionSite,
   writeExploration,
-  type Expedition,
   type ExplorationSave,
   type FlightPhase,
   type SurfaceView,
@@ -49,6 +46,8 @@ function Explorer({ planet }: { planet: PlanetId }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const reduced = usePrefersReducedMotion();
   const desktop = useMinWidth(1024);
+  const phone = !useMinWidth(640);
+  const sound = useSound();
   const sceneRef = useRef<SceneHandle | null>(null);
   const bounds = useMemo(() => catalogYearBounds(catalog.missions), []);
   const [filters, setFilters] = useState<Filters>({ types: [], statuses: [], missionId: null, throughYear: bounds.max });
@@ -64,13 +63,21 @@ function Explorer({ planet }: { planet: PlanetId }) {
   const [flight, setFlight] = useState<FlightPhase>(() => (searchParams.get("object") && !reduced ? "locating" : "idle"));
   const [notice, setNotice] = useState<string | null>(null);
   const [view, setView] = useState<SurfaceView>({ level: "global", distance: 2.8, inView: 0, latitude: 0, longitude: 0 });
-  const [panel, setPanel] = useState<null | "log" | "expedition" | "scan">(null);
-  const [scanning, setScanning] = useState(false);
-  const [scanIds, setScanIds] = useState<string[] | null>(null);
+  const [panel, setPanel] = useState<null | "log">(null);
+  const [narrationNote, setNarrationNote] = useState<string | null>(null);
   const [seeking, setSeeking] = useState(false);
   const [archiveFull, setArchiveFull] = useState(false);
-  const [mapOpen, setMapOpen] = useState(desktop);
   const [toolsOpen, setToolsOpen] = useState(false);
+  const [focusMode, setFocusMode] = useState(false);
+  const [handoff, setHandoff] = useState<PlanetId | null>(null);
+  const [live, setLive] = useState("");
+  const [showOrient, setShowOrient] = useState(() => {
+    try {
+      return sessionStorage.getItem("abnf-orient") !== "hide";
+    } catch {
+      return false;
+    }
+  });
   const seekTurn = useRef(0);
   const noticeTimer = useRef<number | null>(null);
   const ignoreEmptyUntil = useRef(0);
@@ -97,6 +104,18 @@ function Explorer({ planet }: { planet: PlanetId }) {
     if (reduced) setAutoRotate(false);
   }, [reduced]);
 
+  useEffect(() => {
+    if (sound.enabled) return;
+    stopNarration();
+    setNarrationNote(null);
+  }, [sound.enabled]);
+
+  useEffect(() => {
+    soundscape.setPlanet(planet);
+    setLive(fillCopy(t.planetReady, { planet: t[planet] }));
+    return () => soundscape.setPlanet(null);
+  }, [planet, t]);
+
   const planetBoot = useRef(true);
   useEffect(() => {
     if (planetBoot.current) {
@@ -109,21 +128,22 @@ function Explorer({ planet }: { planet: PlanetId }) {
     setFlight("idle");
     setNotice(null);
     setPanel(null);
-    setScanIds(null);
+    setNarrationNote(null);
+    stopNarration();
     setArchiveFull(false);
     setView({ level: "global", distance: 2.8, inView: 0, latitude: 0, longitude: 0 });
   }, [planet]);
 
   useEffect(
-    () =>     () => {
+    () => () => {
       veilTimers.current.forEach((timer) => window.clearTimeout(timer));
       if (noticeTimer.current) window.clearTimeout(noticeTimer.current);
     },
     [],
   );
 
-  const layer = useRef({ help: false, drawer: null as "list" | "timeline" | null, tour: false, panel: null as typeof panel });
-  layer.current = { help: helpOpen, drawer, tour, panel };
+  const layer = useRef({ help: false, drawer: null as "list" | "timeline" | null, tour: false, panel: null as typeof panel, focus: false });
+  layer.current = { help: helpOpen, drawer, tour, panel, focus: focusMode };
   const selectRef = useRef<(object: Artifact, reveal?: boolean) => void>(() => undefined);
   const applyRef = useRef<(object: Artifact, reveal?: boolean) => void>(() => undefined);
   // setSearchParams changes identity with the query string, which would restart the tour on every hop.
@@ -136,6 +156,10 @@ function Explorer({ planet }: { planet: PlanetId }) {
       const tag = (event.target as HTMLElement | null)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
       if (event.key === "Escape") {
+        if (layer.current.focus) {
+          setFocusMode(false);
+          return;
+        }
         if (layer.current.help) {
           setHelpOpen(false);
           return;
@@ -179,6 +203,10 @@ function Explorer({ planet }: { planet: PlanetId }) {
       .sort((a, b) => arrivalOf(a).localeCompare(arrivalOf(b)) || a.id.localeCompare(b.id));
   }, [planet]);
   const selected = catalog.objects.find((object) => object.id === selectedId && object.planet === planet) ?? null;
+  useEffect(() => {
+    if (!selected) return;
+    setLive(fillCopy(t.artifactSelected, { name: selected.name[lang] }));
+  }, [selected, lang, t]);
   const missionFocus = searchParams.get("mission");
   const missionMembers = missionFocus
     ? catalog.objects.filter((object) => object.planet === planet && object.missionId === missionFocus)
@@ -191,8 +219,6 @@ function Explorer({ planet }: { planet: PlanetId }) {
   const events = catalog.events.filter((event) => catalog.objects.find((object) => object.id === event.objectId)?.planet === planet);
 
   const discovered = Object.keys(progress.records);
-  const expedition = progress.expeditions[planet] ?? null;
-
   const revise = (recipe: (current: ExplorationSave) => ExplorationSave) => {
     setProgress((current) => {
       const next = recipe(current);
@@ -233,9 +259,20 @@ function Explorer({ planet }: { planet: PlanetId }) {
     setSearchParams(next, { replace: true });
   };
 
+  const narrateSite = (object: Artifact) => {
+    if (!sound.enabled) {
+      stopNarration();
+      setNarrationNote(null);
+      return;
+    }
+    const result = speakCatalogLine(object.summary[lang], lang, sound.volume);
+    setNarrationNote(result === "no-voice" ? t.narrationMissing : null);
+  };
+
   const selectObject = (object: Artifact, reveal = true, missionId?: string) => {
     setTour(false);
     applySelection(object, reveal, missionId);
+    narrateSite(object);
   };
 
   const openEvent = (event: TimelineEvent) => {
@@ -251,6 +288,8 @@ function Explorer({ planet }: { planet: PlanetId }) {
     if (performance.now() < ignoreEmptyUntil.current) return;
     setTour(false);
     setFlight("idle");
+    stopNarration();
+    setNarrationNote(null);
     if (!selectedIdRef.current) return;
     setSearchParams({}, { replace: true });
   };
@@ -293,12 +332,16 @@ function Explorer({ planet }: { planet: PlanetId }) {
       navigate(`/explore/${next}`);
       return;
     }
+    setHandoff(next);
     setVeil(true);
     const fadeIn = window.setTimeout(() => {
       navigate(`/explore/${next}`);
-      const fadeOut = window.setTimeout(() => setVeil(false), 180);
+      const fadeOut = window.setTimeout(() => {
+        setVeil(false);
+        setHandoff(null);
+      }, transitionMs.planetReveal);
       veilTimers.current.push(fadeOut);
-    }, 260);
+    }, transitionMs.planetHold);
     veilTimers.current.push(fadeIn);
   };
 
@@ -360,16 +403,12 @@ function Explorer({ planet }: { planet: PlanetId }) {
         ? `${countText(planetTotal)} ${t.objects}`
         : fillCopy(t.inView, { count: countText(view.inView) });
   const viewKicker = { global: t.viewGlobal, region: t.viewRegion, site: t.viewSite, artifact: t.viewArtifact }[view.level];
-
-  const changeExpedition = (next: Expedition | null) => {
-    revise((current) => {
-      const expeditions = { ...current.expeditions };
-      if (!next || next.artifactIds.length === 0) delete expeditions[planet];
-      else expeditions[planet] = next;
-      return { ...current, expeditions };
-    });
-  };
-
+  const foundHere = catalog.objects.filter((object) => object.planet === planet && progress.records[object.id]?.discoveredAt).length;
+  const missionRecord = selected
+    ? missionById(catalog.missions, selected.missionId)
+    : missionFocus
+      ? missionById(catalog.missions, missionFocus)
+      : null;
   const discoverSite = () => {
     if (seeking) return;
     const choice = pickDiscovery(
@@ -400,30 +439,6 @@ function Explorer({ planet }: { planet: PlanetId }) {
     }
   };
 
-  const runScan = () => {
-    setScanning(true);
-    const ids = sitesFacing(
-      catalog.objects.map((object) => ({
-        id: object.id,
-        planet: object.planet,
-        latitude: object.location.latitude,
-        longitude: object.location.longitude,
-      })),
-      planet,
-      view.latitude,
-      view.longitude,
-      scanAngle(view.distance),
-    );
-    const finish = () => {
-      setScanning(false);
-      remember(ids);
-      setScanIds(ids);
-      setPanel("scan");
-    };
-    if (reduced) finish();
-    else window.setTimeout(finish, 900);
-  };
-
   const openRecorded = (id: string) => {
     const object = catalog.objects.find((item) => item.id === id);
     if (!object) return;
@@ -439,7 +454,6 @@ function Explorer({ planet }: { planet: PlanetId }) {
     setDrawer((current) => (current === nextDrawer ? null : nextDrawer));
   };
 
-  const named = (id: string) => catalog.objects.find((object) => object.id === id);
   const worlds = (["moon", "mars"] as const).map((world) => {
     const objects = catalog.objects.filter((object) => object.planet === world);
     const found = objects.filter((object) => progress.records[object.id]);
@@ -467,50 +481,6 @@ function Explorer({ planet }: { planet: PlanetId }) {
       explored: Boolean(record.exploredAt),
     }];
   });
-  const scanSites = (scanIds ?? []).flatMap((id) => {
-    const object = named(id);
-    return object ? [{ id, name: object.name[lang], missionId: object.missionId }] : [];
-  });
-  const scanMissions = [...new Set(scanSites.map((site) => site.missionId))];
-  const repeatedMission = scanSites.length > 1 && scanMissions.length === 1 ? scanMissions[0] : null;
-  const minimapMarks = catalog.objects.flatMap((object) => {
-    if (object.planet !== planet) return [];
-    const stops = expedition?.artifactIds ?? [];
-    const stopIndex = stops.indexOf(object.id);
-    const known = Boolean(progress.records[object.id]);
-    if (!known && stopIndex < 0 && object.id !== selected?.id) return [];
-    const role =
-      object.id === selected?.id
-        ? "selected"
-        : expedition?.status === "active" && stopIndex === expedition.currentIndex
-          ? "current"
-          : stopIndex >= 0 && (expedition?.status === "completed" || (expedition?.status === "active" && stopIndex < (expedition?.currentIndex ?? 0)))
-            ? "done"
-            : stopIndex >= 0
-              ? "planned"
-              : "discovered";
-    return [{ id: object.id, latitude: object.location.latitude, longitude: object.location.longitude, role }] as const;
-  });
-  const expeditionSites = (expedition?.artifactIds ?? []).flatMap((id) => {
-    const object = named(id);
-    return object ? [{ id, name: object.name[lang] }] : [];
-  });
-  const visitedObjects = (expedition?.artifactIds ?? []).flatMap((id) => {
-    const object = named(id);
-    return object ? [object] : [];
-  });
-  const spanYears = visitedObjects.flatMap((object) => {
-    const mission = missionById(catalog.missions, object.missionId);
-    return [yearOf(mission?.arrivalDate), yearOf(mission?.endDate)].filter((year): year is number => year !== null);
-  });
-  const expeditionSummary = expedition?.status === "completed"
-    ? {
-        visited: `${t.sitesVisited}: ${visitedObjects.length}`,
-        missions: `${t.missionsEncountered}: ${new Set(visitedObjects.map((object) => object.missionId)).size}`,
-        explored: `${t.artifactsExplored}: ${visitedObjects.filter((object) => progress.records[object.id]?.exploredAt).length}`,
-        span: spanYears.length > 0 ? `${t.timelineSpan}: ${Math.min(...spanYears)}–${Math.max(...spanYears)}` : undefined,
-      }
-    : null;
   const panelClass = desktop
     ? "pointer-events-auto absolute top-36 left-3 z-30 max-h-[min(54dvh,520px)] w-[min(340px,calc(100%-1.5rem))] overflow-auto rounded-3xl border border-white/15 bg-[#070d1c]/88 p-4 shadow-2xl"
     : "pointer-events-auto absolute inset-x-3 top-16 bottom-3 z-40 overflow-auto rounded-3xl border border-white/15 bg-[#070d1c]/94 p-4";
@@ -528,13 +498,20 @@ function Explorer({ planet }: { planet: PlanetId }) {
           objects={markers}
           selectedId={selected?.id ?? null}
           focusNonce={focusNonce}
-          siteFrame={desktop ? { right: -0.16, up: 0 } : { right: 0, up: 0.22 }}
+          siteFrame={focusMode ? { right: 0, up: 0 } : desktop ? { right: -0.16, up: 0 } : { right: 0, up: 0.22 }}
+          guideSite={
+            selected
+              ? { latitude: selected.location.latitude, longitude: selected.location.longitude, attentive: true }
+              : null
+          }
           emphasisNonce={emphasisNonce}
           intro={false}
           autoRotate={autoRotate && !holdSpin}
           reducedMotion={reduced}
           errorMessage={t.sceneError}
           loadingLabel={t.loadingSurface}
+          surfaceError={t.surfaceUnavailable}
+          retryLabel={t.retry}
           clusterHint={t.clusterChoose}
           labelFor={(object) => object.name[lang]}
           captionFor={(object) => {
@@ -573,12 +550,55 @@ function Explorer({ planet }: { planet: PlanetId }) {
       <div
         className={`pointer-events-none absolute inset-x-0 top-16 bottom-0 z-10 bg-[radial-gradient(circle_at_center,transparent_16%,rgba(0,0,0,0.58)_78%)] transition-opacity duration-700 ${storyReady ? "opacity-100" : "opacity-0"}`}
       />
-      <TopBar planet={planet} onPlanet={switchPlanet} dimmed={Boolean(selected)} onHelp={() => setHelpOpen(true)} onFullscreen={toggleFullscreen} />
-      {!listVisible && (
+      <TopBar
+        planet={planet}
+        onPlanet={switchPlanet}
+        dimmed={Boolean(selected)}
+        search={<SearchBox objects={catalog.objects} missions={catalog.missions} onSelect={(object) => selectObject(object)} />}
+        onHelp={() => setHelpOpen(true)}
+        onFullscreen={toggleFullscreen}
+        focus={{ active: focusMode, onToggle: () => setFocusMode((value) => !value) }}
+        sound={{ enabled: sound.enabled, failed: sound.failed, volume: sound.volume, onToggle: sound.toggle, onVolume: sound.setVolume }}
+      />
+      <div className="sr-only" role="status" aria-live="polite">{live}</div>
+      {focusMode && selected && (
+        <button type="button" className="absolute top-20 left-4 z-30 max-w-[16rem] truncate rounded-full border border-white/15 bg-[#070d1c]/80 px-4 py-2 text-left text-sm text-[#f4f7ff]" onClick={() => setFocusMode(false)}>
+          {selected.name[lang]}
+        </button>
+      )}
+      {!listVisible && !focusMode && (
         <div className="pointer-events-none absolute top-20 left-3 z-30 max-w-[14rem]">
           <p className="text-[10px] tracking-[0.18em] text-[#f2a64a] uppercase">{viewKicker}</p>
           <p className="text-sm text-[#f4f7ff]">{viewTitle}</p>
           <p className="text-xs text-[#93a6c9]">{viewNote}</p>
+          <MissionStatus
+            kicker={t.missionControl}
+            lines={[
+              { label: t.explore, value: t[planet] },
+              ...(selected ? [{ label: t.region, value: selected.location.region ?? selected.location.locationName }] : []),
+              { label: t.sitesDiscovered, value: `${foundHere} / ${planetTotal}` },
+              ...(missionRecord ? [{ label: t.mission, value: missionRecord.name[lang] }] : []),
+            ]}
+          />
+          {phone && showOrient && (
+            <p className="pointer-events-auto mt-2 flex items-center gap-2 text-[11px] text-[#c5d2ea]">
+              {t.portraitHint}
+              <button
+                type="button"
+                className="min-h-11 shrink-0 text-[#f4f7ff]"
+                onClick={() => {
+                  setShowOrient(false);
+                  try {
+                    sessionStorage.setItem("abnf-orient", "hide");
+                  } catch {
+                    /* The hint can stay dismissed for this visit. */
+                  }
+                }}
+              >
+                {t.dismiss}
+              </button>
+            </p>
+          )}
           {notice && (
             <div className="mt-3">
               <p className="text-[10px] tracking-[0.16em] text-[#6aa4ff] uppercase">{t.siteDetected}</p>
@@ -589,41 +609,29 @@ function Explorer({ planet }: { planet: PlanetId }) {
             <IconTool label={t.exploreTools} pressed={toolsOpen} expanded={toolsOpen} onClick={() => setToolsOpen((value) => !value)}>
               {toolsOpen ? <LuX aria-hidden="true" /> : <LuMenu aria-hidden="true" />}
             </IconTool>
-            <div inert={toolsOpen ? undefined : true} className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${toolsOpen ? "grid-rows-[1fr] opacity-100" : "pointer-events-none grid-rows-[0fr] opacity-0"} ${reduced ? "transition-none" : ""}`}>
-              <div className="flex flex-col gap-2 overflow-hidden">
+            <div inert={toolsOpen ? undefined : true} className={`mt-2 flex flex-col gap-2 transition-[opacity,transform] duration-300 ease-out ${toolsOpen ? "opacity-100" : "pointer-events-none -translate-y-2 opacity-0"} ${reduced ? "transition-none" : ""}`}>
+              <div className="flex flex-col gap-2">
+                <IconTool label={t.objects} onClick={() => toggleDrawer("list")}>
+                  <LuList aria-hidden="true" />
+                </IconTool>
+                <IconTool label={tour ? t.stopTour : t.tour} pressed={tour} onClick={toggleTour}>
+                  <LuPlay aria-hidden="true" />
+                </IconTool>
+                <IconTool label={discovery ? t.discovery : t.showAllSites} pressed={discovery} onClick={() => setDiscovery((value) => !value)}>
+                  <LuEye aria-hidden="true" />
+                </IconTool>
                 <IconTool label={seeking ? t.searchingArchive : selected ? t.discoverAnother : t.discoverSomething} onClick={discoverSite}>
                   <LuCompass aria-hidden="true" />
-                </IconTool>
-                <IconTool label={scanning ? t.scanningSurface : t.scanSurface} onClick={runScan}>
-                  <LuScan aria-hidden="true" />
                 </IconTool>
                 <IconTool label={t.explorerLog} pressed={panel === "log"} onClick={() => setPanel((current) => (current === "log" ? null : "log"))}>
                   <LuBookOpen aria-hidden="true" />
                 </IconTool>
-                <IconTool label={t.myExpedition} pressed={panel === "expedition"} onClick={() => setPanel((current) => (current === "expedition" ? null : "expedition"))}>
-                  <LuRoute aria-hidden="true" />
-                </IconTool>
-                <IconTool label={mapOpen ? t.hideMap : t.showMap} pressed={mapOpen} onClick={() => setMapOpen((value) => !value)}>
-                  <LuMap aria-hidden="true" />
-                </IconTool>
               </div>
             </div>
           </div>
-          {mapOpen && (
-            <div className="pointer-events-none mt-3">
-              <Minimap
-                planet={planet}
-                latitude={view.latitude}
-                longitude={view.longitude}
-                hereLabel={t.youAreHere}
-                label={`${t.minimapLabel}. ${viewTitle}.`}
-                marks={minimapMarks}
-              />
-            </div>
-          )}
         </div>
       )}
-      {panel && (
+      {panel && !focusMode && (
         <div className={panelClass}>
           {archiveFull && panel === "log" && (
             <p className="mb-3 text-sm text-[#f4f7ff]">
@@ -652,86 +660,18 @@ function Explorer({ planet }: { planet: PlanetId }) {
               onClose={() => setPanel(null)}
             />
           )}
-          {panel === "expedition" && (
-            <ExpeditionPanel
-              title={t.myExpedition}
-              emptyLabel={t.noExpedition}
-              closeLabel={t.close}
-              startLabel={t.startExpedition}
-              nextLabel={t.nextSite}
-              completeLabel={t.expeditionComplete}
-              newLabel={t.newExpedition}
-              earlierLabel={t.moveEarlier}
-              laterLabel={t.moveLater}
-              removeLabel={t.removeFromExpedition}
-              stepLabel={expedition ? fillCopy(t.expeditionStep, { index: expedition.currentIndex + 1, total: expedition.artifactIds.length }) : ""}
-              sites={expeditionSites}
-              expedition={expedition}
-              summary={expeditionSummary}
-              onOpen={openRecorded}
-              onStart={() => {
-                if (!expedition || expedition.artifactIds.length === 0) return;
-                setTour(false);
-                changeExpedition({ ...expedition, status: "active", currentIndex: 0 });
-                const object = named(expedition.artifactIds[0]);
-                if (object) selectObject(object, false);
-              }}
-              onNext={() => {
-                if (!expedition || expedition.status !== "active") return;
-                const index = expedition.currentIndex + 1;
-                if (index >= expedition.artifactIds.length) {
-                  changeExpedition({ ...expedition, status: "completed" });
-                  return;
-                }
-                changeExpedition({ ...expedition, currentIndex: index });
-                const object = named(expedition.artifactIds[index]);
-                if (object) selectObject(object, false);
-              }}
-              onMove={(id, direction) => expedition && changeExpedition(moveExpeditionSite(expedition, id, direction))}
-              onRemove={(id) => changeExpedition(toggleExpeditionSite(expedition ?? undefined, id))}
-              onClear={() => changeExpedition(null)}
-              onClose={() => setPanel(null)}
-            />
-          )}
-          {panel === "scan" && (
-            <ScanPanel
-              title={t.scanResults}
-              countLabel={scanSites.length > 0 ? fillCopy(t.sitesDetected, { count: scanSites.length }) : null}
-              emptyLabel={t.noScanHits}
-              closeLabel={t.close}
-              missionLabel={repeatedMission ? t.showMissionLinks : null}
-              sites={scanSites}
-              onSelect={openRecorded}
-              onMission={
-                repeatedMission
-                  ? () => {
-                      const object = catalog.objects.find((item) => item.id === scanSites[0]?.id);
-                      if (!object) return;
-                      selectObject(object, false, repeatedMission);
-                      setPanel(null);
-                    }
-                  : null
-              }
-              onClose={() => setPanel(null)}
-            />
-          )}
         </div>
       )}
-      {scanning && <div className="scan-ring pointer-events-none absolute top-1/2 left-1/2 z-30 h-72 w-72 -translate-x-1/2 -translate-y-1/2 rounded-full border border-[#6aa4ff]/70" aria-hidden="true" />}
       {(seeking || (selected && flight !== "idle")) && (
         <p className="pointer-events-none absolute bottom-24 left-1/2 z-30 -translate-x-1/2 text-[11px] tracking-[0.22em] text-[#f2a64a] uppercase">
           {seeking ? t.searchingArchive : flight === "locating" ? t.locatingSite : t.targetAcquired}
         </p>
       )}
-      <div className={`pointer-events-none absolute inset-x-0 top-16 bottom-0 z-20 transition-opacity duration-500 ${storyReady ? "opacity-60" : ""}`}>
-        <div className="pointer-events-auto absolute top-3 right-3">
-          <SearchBox objects={catalog.objects} missions={catalog.missions} onSelect={(object) => selectObject(object)} />
-        </div>
+      <div inert={focusMode ? true : undefined} className={`pointer-events-none absolute inset-x-0 top-16 bottom-0 z-20 transition-opacity duration-500 ${focusMode ? "opacity-0" : storyReady ? "opacity-60" : ""}`}>
         <div
           inert={listVisible ? undefined : true}
-          className={`pointer-events-auto absolute bottom-28 left-3 flex transition duration-500 ${desktop ? "top-3 w-[min(340px,calc(100%-1.5rem))]" : "top-14 right-3"} ${
-            listVisible ? "translate-x-0 opacity-100" : "pointer-events-none -translate-x-[120%] opacity-0"
-          }`}
+          className={`pointer-events-auto absolute bottom-36 left-3 flex transition duration-500 ${desktop ? "top-16 w-[min(340px,calc(100%-1.5rem))]" : "top-14 right-3"} ${listVisible ? "translate-x-0 opacity-100" : "pointer-events-none -translate-x-[120%] opacity-0"
+            }`}
         >
           <ObjectList
             planet={planet}
@@ -742,58 +682,29 @@ function Explorer({ planet }: { planet: PlanetId }) {
             selectedId={selected?.id ?? null}
             yearBounds={bounds}
             onFilters={(nextFilters) => setFilters({ ...nextFilters, missionId: nextFilters.missionId })}
+            onClose={() => setDrawer(null)}
             onSelect={(id) => {
               const object = catalog.objects.find((item) => item.id === id);
               if (object) selectObject(object, false);
             }}
           />
         </div>
-        {showDock && (
-          <div className={`pointer-events-auto absolute bottom-[4.75rem] left-3 flex flex-col gap-2 ${selected && desktop ? "right-[27rem]" : "right-3"}`}>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  aria-pressed={drawer === "list"}
-                  onClick={() => toggleDrawer("list")}
-                  className={`rounded-full border px-3 py-2 text-sm ${drawer === "list" ? "border-[#6aa4ff] bg-[#6aa4ff]/15" : "border-white/15 bg-black/70"}`}
-                >
-                  {t.objects}
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={tour}
-                  onClick={toggleTour}
-                  className={`rounded-full border px-3 py-2 text-sm ${tour ? "border-[#6aa4ff] bg-[#6aa4ff]/15 text-[#6aa4ff]" : "border-white/15 bg-black/70"}`}
-                >
-                  {tour ? t.stopTour : t.tour}
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={discovery}
-                  onClick={() => setDiscovery((value) => !value)}
-                  className={`rounded-full border px-3 py-2 text-sm ${discovery ? "border-[#6aa4ff] bg-[#6aa4ff]/15 text-[#6aa4ff]" : "border-white/15 bg-black/70"}`}
-                >
-                  {discovery ? t.discovery : t.showAllSites}
-                </button>
-              </div>
-              {webgl && (
-              <CameraCluster
-                zoomInLabel={t.zoomIn}
-                zoomOutLabel={t.zoomOut}
-                resetLabel={t.resetView}
-                spinLabel={t.autoRotate}
-                spinning={autoRotate}
-                onZoomIn={() => sceneRef.current?.zoomIn()}
-                onZoomOut={() => sceneRef.current?.zoomOut()}
-                onReset={() => {
-                  if (selectedIdRef.current) closeStory();
-                  else sceneRef.current?.reset();
-                }}
-                onSpin={() => setAutoRotate((value) => !value)}
-              />
-              )}
-            </div>
+        {webgl && (
+          <div className={`pointer-events-auto absolute left-3 z-30 ${desktop ? "bottom-19" : selected ? "bottom-[calc(72dvh+1rem)]" : "bottom-19"}`}>
+            <CameraCluster
+              zoomInLabel={t.zoomIn}
+              zoomOutLabel={t.zoomOut}
+              resetLabel={t.resetView}
+              spinLabel={t.autoRotate}
+              spinning={autoRotate}
+              onZoomIn={() => sceneRef.current?.zoomIn()}
+              onZoomOut={() => sceneRef.current?.zoomOut()}
+              onReset={() => {
+                if (selectedIdRef.current) closeStory();
+                else sceneRef.current?.reset();
+              }}
+              onSpin={() => setAutoRotate((value) => !value)}
+            />
           </div>
         )}
         {showDock && (
@@ -818,37 +729,8 @@ function Explorer({ planet }: { planet: PlanetId }) {
             </button>
           </div>
         )}
-        {!desktop && selected && (
-          <div className="pointer-events-auto absolute right-3 bottom-[calc(56dvh+0.75rem)] flex items-center gap-2">
-            {tour && (
-              <button
-                type="button"
-                onClick={toggleTour}
-                className="rounded-full border border-[#6aa4ff] bg-[#6aa4ff]/15 px-3 py-2 text-sm text-[#6aa4ff]"
-              >
-                {t.stopTour}
-              </button>
-            )}
-            {webgl && (
-            <CameraCluster
-              zoomInLabel={t.zoomIn}
-              zoomOutLabel={t.zoomOut}
-              resetLabel={t.resetView}
-              spinLabel={t.autoRotate}
-              spinning={autoRotate}
-              onZoomIn={() => sceneRef.current?.zoomIn()}
-              onZoomOut={() => sceneRef.current?.zoomOut()}
-              onReset={() => {
-                if (selectedIdRef.current) closeStory();
-                else sceneRef.current?.reset();
-              }}
-              onSpin={() => setAutoRotate((value) => !value)}
-            />
-            )}
-          </div>
-        )}
       </div>
-      {storyReady && selected && (
+      {storyReady && selected && !focusMode && (
         <StoryPanel
           object={selected}
           missions={catalog.missions}
@@ -875,20 +757,30 @@ function Explorer({ planet }: { planet: PlanetId }) {
             const object = catalog.objects.find((item) => item.id === event.objectId);
             if (object) selectObject(object, false);
           }}
-          inExpedition={Boolean(expedition?.artifactIds.includes(selected.id))}
-          onToggleExpedition={() => changeExpedition(toggleExpeditionSite(expedition ?? undefined, selected.id))}
+          onHear={() => narrateSite(selected)}
+          narrationNote={narrationNote}
         />
       )}
-      <div className={`absolute inset-0 z-[70] bg-black transition-opacity duration-200 ${veil ? "opacity-100" : "pointer-events-none opacity-0"}`} />
+      <div role="status" className={`absolute inset-0 z-[70] grid place-items-center bg-[#070d1c] transition-opacity duration-300 ${veil ? "opacity-100" : "pointer-events-none opacity-0"}`}>
+        {veil && handoff && (
+          <div className="px-6 text-center">
+            <p className="text-[11px] tracking-[0.22em] text-[#f2a64a] uppercase">{fillCopy(t.preparingPlanet, { planet: t[handoff] })}</p>
+            <p className="mt-3 text-sm text-[#f4f7ff]">{t.loadingSurface}</p>
+          </div>
+        )}
+      </div>
+      {sound.failed && <p className="pointer-events-none absolute top-16 right-4 z-30 max-w-xs text-xs text-[#c5d2ea]">{t.audioUnavailable}</p>}
       {helpOpen && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" onClick={() => setHelpOpen(false)}>
-          <div className="max-w-md rounded-3xl border border-white/10 bg-[#10182e] p-6" role="dialog" aria-labelledby="help-title" onClick={(event) => event.stopPropagation()}>
+          <div className="max-w-md rounded-3xl border border-white/10 bg-[#10182e] p-6" role="dialog" aria-modal="true" aria-labelledby="help-title" onClick={(event) => event.stopPropagation()}>
             <h2 id="help-title" className="font-display text-3xl">
               {t.helpTitle}
             </h2>
             <p className="mt-3 text-sm leading-6 text-[#c5d2ea]">{t.howToBody}</p>
+            <p className="mt-3 text-sm leading-6 text-[#c5d2ea]">{t.focusHelp}</p>
+            <p className="mt-3 text-sm leading-6 text-[#93a6c9]">{t.ambientNote}</p>
             {reduced && <p className="mt-3 text-sm text-[#6aa4ff]">{t.reducedMotion}</p>}
-            <button type="button" className="mt-5 rounded-full bg-[#3d7eff] px-4 py-2 text-sm text-[#f4f7ff]" onClick={() => setHelpOpen(false)}>
+            <button type="button" autoFocus className="mt-5 min-h-11 rounded-full bg-[#3d7eff] px-4 py-2 text-sm text-[#f4f7ff]" onClick={() => setHelpOpen(false)}>
               {t.close}
             </button>
           </div>
@@ -919,7 +811,7 @@ function IconTool({
         aria-pressed={pressed}
         aria-expanded={expanded}
         onClick={onClick}
-        className={`grid h-10 w-10 place-items-center rounded-full border text-[15px] shadow-lg backdrop-blur-md transition duration-300 ${pressed ? "border-[#6aa4ff] bg-[#3d7eff] text-[#f4f7ff]" : "border-white/25 bg-[#070d1c]/80 text-[#f4f7ff] hover:border-[#6aa4ff] hover:bg-[#121a31]"}`}
+        className={`grid h-11 w-11 place-items-center rounded-full border text-[15px] shadow-lg backdrop-blur-md transition duration-300 ${pressed ? "border-[#6aa4ff] bg-[#3d7eff] text-[#f4f7ff]" : "border-white/25 bg-[#070d1c]/80 text-[#f4f7ff] hover:border-[#6aa4ff] hover:bg-[#121a31]"}`}
       >
         {children}
       </button>
@@ -952,7 +844,7 @@ function CameraCluster({
   onSpin: () => void;
 }) {
   return (
-    <div className="flex items-center rounded-full border border-white/15 bg-black/70">
+    <div className="flex shrink-0 items-center gap-0.5 rounded-2xl border border-white/15 bg-[#070d1c]/90 p-1 shadow-xl backdrop-blur-md">
       <ClusterButton label={zoomInLabel} onClick={onZoomIn}>
         <LuPlus />
       </ClusterButton>
@@ -963,7 +855,7 @@ function CameraCluster({
         <LuRotateCcw />
       </ClusterButton>
       <ClusterButton label={spinLabel} pressed={spinning} onClick={onSpin}>
-        <span className="text-[10px]">{spinning ? "ON" : "OFF"}</span>
+        <LuRefreshCw className={spinning ? "transition-transform duration-500" : "opacity-60"} />
       </ClusterButton>
     </div>
   );
@@ -981,15 +873,19 @@ function ClusterButton({
   children: ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      aria-pressed={pressed}
-      onClick={onClick}
-      className={`grid h-9 w-9 place-items-center text-sm ${pressed ? "text-[#6aa4ff]" : "text-[#f4f7ff]"}`}
-    >
-      {children}
-    </button>
+    <span className="group relative block">
+      <button
+        type="button"
+        aria-label={label}
+        aria-pressed={pressed}
+        onClick={onClick}
+        className={`grid h-10 w-10 place-items-center rounded-xl text-sm transition hover:bg-white/10 ${pressed ? "bg-[#6aa4ff]/15 text-[#6aa4ff]" : "text-[#f4f7ff]"}`}
+      >
+        {children}
+      </button>
+      <span role="tooltip" className="pointer-events-none absolute top-1/2 left-[calc(100%+0.55rem)] z-40 -translate-y-1/2 whitespace-nowrap rounded-full border border-white/10 bg-[#070d1c]/95 px-2.5 py-1 text-[11px] text-[#f4f7ff] opacity-0 shadow-lg transition duration-200 group-hover:opacity-100 group-focus-within:opacity-100">
+        {label}
+      </span>
+    </span>
   );
 }

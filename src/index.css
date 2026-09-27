@@ -8,6 +8,14 @@
   --color-muted: #93a6c9;
   --color-accent: #6aa4ff;
   --color-gold: #f2a64a;
+  --color-surface: #10182e;
+  --color-line: rgb(255 255 255 / 0.12);
+  --z-scene: 0;
+  --z-overlay: 20;
+  --z-chrome: 30;
+  --z-story: 40;
+  --z-modal: 50;
+  --z-veil: 70;
 }
 
 html,

@@ -25,7 +25,7 @@ export function ScanPanel({
         <h2 id="scan-title" className="font-display text-2xl">
           {title}
         </h2>
-        <button type="button" onClick={onClose} className="rounded-full border border-white/15 px-3 py-1 text-xs">
+        <button type="button" autoFocus onClick={onClose} className="min-h-11 rounded-full border border-white/15 px-3 py-1 text-xs">
           {closeLabel}
         </button>
       </div>

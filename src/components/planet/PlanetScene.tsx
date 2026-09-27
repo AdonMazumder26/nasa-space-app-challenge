@@ -1,4 +1,5 @@
 import { OrbitControls, useProgress, useTexture, Html } from "@react-three/drei";
+import { GuideAstronaut } from "../astronaut/GuideAstronaut";
 import { StarField } from "./StarField";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Component, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -57,6 +58,8 @@ type SceneProps = {
   reducedMotion: boolean;
   errorMessage: string;
   loadingLabel: string;
+  surfaceError: string;
+  retryLabel: string;
   clusterHint: string;
   labelFor: (object: Artifact) => string;
   onSelect: (id: string) => void;
@@ -71,6 +74,9 @@ type SceneProps = {
   missionIds?: readonly string[];
   // Moves the site left and up so the story panel and bottom bar do not cover it.
   siteFrame?: { right: number; up: number };
+  textureAttempt?: number;
+  onTextureFail?: () => void;
+  guideSite?: { latitude: number; longitude: number; attentive?: boolean } | null;
 };
 
 class WebglBoundary extends Component<{ children: ReactNode; fallback: ReactNode }, { failed: boolean }> {
@@ -127,11 +133,15 @@ function PlainList({
   );
 }
 
-class TextureBoundary extends Component<{ children: ReactNode; fallback: ReactNode }, { failed: boolean }> {
+class TextureBoundary extends Component<{ children: ReactNode; fallback: ReactNode; onFail?: () => void }, { failed: boolean }> {
   state = { failed: false };
 
   static getDerivedStateFromError(): { failed: boolean } {
     return { failed: true };
+  }
+
+  componentDidCatch() {
+    this.props.onFail?.();
   }
 
   render() {
@@ -911,7 +921,7 @@ function SurfaceLoader({ label }: { label: string }) {
   const { active, progress } = useProgress();
   if (!active) return null;
   return (
-    <div className="pointer-events-none absolute bottom-28 left-1/2 z-20 -translate-x-1/2 rounded-full border border-white/10 bg-black/60 px-4 py-2 text-xs tracking-wide text-[#f4f7ff]">
+    <div role="status" className="pointer-events-none absolute bottom-28 left-1/2 z-20 -translate-x-1/2 rounded-full border border-white/10 bg-black/70 px-4 py-2 text-xs tracking-wide text-[#f4f7ff]">
       {label} {Math.round(progress)}%
     </div>
   );
@@ -1074,12 +1084,19 @@ function SceneContents(props: SceneProps) {
       <Lights planet={props.planet} />
       <CameraFill enabled={selected !== null} />
       <SpinningBody angle={spinAngle} gate={spinGate}>
-        <TextureBoundary key={props.planet} fallback={<FallbackSphere planet={props.planet} />}>
+        <TextureBoundary key={`${props.planet}-${props.textureAttempt ?? 0}`} onFail={props.onTextureFail} fallback={<FallbackSphere planet={props.planet} />}>
           <Suspense fallback={<FallbackSphere planet={props.planet} />}>
             <TexturedPlanet planet={props.planet} />
           </Suspense>
         </TextureBoundary>
         {props.planet === "mars" && <MarsAir />}
+        {props.guideSite && (
+          <GuideAstronaut
+            latitude={props.guideSite.latitude}
+            longitude={props.guideSite.longitude}
+            reducedMotion={props.reducedMotion}
+          />
+        )}
         <MarkerLayer
           objects={props.objects}
           selectedId={props.selectedId}
@@ -1124,22 +1141,39 @@ export function PlanetViewport(props: SceneProps) {
     <PlainList objects={props.objects} message={props.errorMessage} labelFor={props.labelFor} onSelect={props.onSelect} />
   );
   const [supported] = useState(webglAvailable);
+  const [textureAttempt, setTextureAttempt] = useState(0);
+  const [textureFailed, setTextureFailed] = useState(false);
+  useEffect(() => {
+    setTextureFailed(false);
+  }, [props.planet, textureAttempt]);
   if (!supported) return fallback;
   return (
     <WebglBoundary fallback={fallback}>
       <div className="absolute inset-0">
         <Canvas
           camera={{ position: [DEFAULT_OFFSET.x, DEFAULT_OFFSET.y, DEFAULT_OFFSET.z], fov: 42, near: 0.05, far: 280 }}
-          dpr={[1, 1.75]}
+          dpr={[1, window.matchMedia("(max-width: 640px)").matches ? 1.25 : 1.75]}
           gl={{ antialias: true, alpha: false, powerPreference: "high-performance" }}
           onCreated={({ gl }) => {
             gl.toneMapping = THREE.ACESFilmicToneMapping;
             gl.toneMappingExposure = 1.05;
           }}
         >
-          <SceneContents {...props} />
+          <SceneContents
+            {...props}
+            textureAttempt={textureAttempt}
+            onTextureFail={() => setTextureFailed(true)}
+          />
         </Canvas>
         <SurfaceLoader label={props.loadingLabel} />
+        {textureFailed && (
+          <div role="alert" className="absolute bottom-28 left-1/2 z-30 flex -translate-x-1/2 items-center gap-3 rounded-2xl border border-white/15 bg-[#070d1c]/90 px-4 py-3 text-sm text-[#f4f7ff]">
+            <p>{props.surfaceError}</p>
+            <button type="button" className="min-h-11 rounded-full bg-[#3d7eff] px-3 text-sm" onClick={() => setTextureAttempt((value) => value + 1)}>
+              {props.retryLabel}
+            </button>
+          </div>
+        )}
       </div>
     </WebglBoundary>
   );
