@@ -6,7 +6,6 @@ import { StoryPanel } from "../components/object/StoryPanel";
 import { PlanetViewport, webglAvailable, type SceneHandle } from "../components/planet/PlanetScene";
 import { SearchBox } from "../components/search/SearchBox";
 import { TimelineBar } from "../components/timeline/TimelineBar";
-import { MissionStatus } from "../components/layout/MissionStatus";
 import { TopBar } from "../components/layout/TopBar";
 import { ExplorerLog } from "../components/explore/ExplorerLog";
 import { catalog } from "../data/catalog";
@@ -78,8 +77,18 @@ function Explorer({ planet }: { planet: PlanetId }) {
       return false;
     }
   });
+  const [promptDismissed, setPromptDismissed] = useState(() => {
+    try {
+      return sessionStorage.getItem("abnf-explore-prompt") === "hide";
+    } catch {
+      return false;
+    }
+  });
+  const [milestone, setMilestone] = useState<string | null>(null);
   const seekTurn = useRef(0);
   const noticeTimer = useRef<number | null>(null);
+  const milestoneTimer = useRef<number | null>(null);
+  const lastFoundCount = useRef<number | null>(null);
   const ignoreEmptyUntil = useRef(0);
   // Without a globe the camera controls have nothing to act on.
   const [webgl] = useState(webglAvailable);
@@ -138,6 +147,7 @@ function Explorer({ planet }: { planet: PlanetId }) {
     () => () => {
       veilTimers.current.forEach((timer) => window.clearTimeout(timer));
       if (noticeTimer.current) window.clearTimeout(noticeTimer.current);
+      if (milestoneTimer.current) window.clearTimeout(milestoneTimer.current);
     },
     [],
   );
@@ -323,6 +333,7 @@ function Explorer({ planet }: { planet: PlanetId }) {
     }
     setFilters({ types: [], statuses: [], missionId: null, throughYear: bounds.max });
     setDrawer(null);
+    dismissExplorerPrompt();
     setTour(true);
   };
 
@@ -404,11 +415,37 @@ function Explorer({ planet }: { planet: PlanetId }) {
         : fillCopy(t.inView, { count: countText(view.inView) });
   const viewKicker = { global: t.viewGlobal, region: t.viewRegion, site: t.viewSite, artifact: t.viewArtifact }[view.level];
   const foundHere = catalog.objects.filter((object) => object.planet === planet && progress.records[object.id]?.discoveredAt).length;
-  const missionRecord = selected
-    ? missionById(catalog.missions, selected.missionId)
-    : missionFocus
-      ? missionById(catalog.missions, missionFocus)
-      : null;
+  const progressPercent = planetTotal === 0 ? 0 : Math.round((foundHere / planetTotal) * 100);
+  const showExplorerPrompt = !promptDismissed && foundHere === 0 && !selected && !tour && !focusMode;
+
+  useEffect(() => {
+    const previous = lastFoundCount.current;
+    lastFoundCount.current = foundHere;
+    if (previous === null || foundHere <= previous) return;
+    const halfway = Math.ceil(planetTotal / 2);
+    const crossedHalf = previous < halfway && foundHere >= halfway;
+    const message = foundHere === planetTotal
+      ? t.discoveryMilestoneComplete
+      : crossedHalf
+        ? t.discoveryMilestoneHalf
+        : previous === 0
+          ? t.discoveryMilestoneFirst
+          : null;
+    if (!message) return;
+    setMilestone(message);
+    setLive(message);
+    if (milestoneTimer.current) window.clearTimeout(milestoneTimer.current);
+    milestoneTimer.current = window.setTimeout(() => setMilestone(null), 4200);
+  }, [foundHere, planetTotal, t]);
+
+  const dismissExplorerPrompt = () => {
+    setPromptDismissed(true);
+    try {
+      sessionStorage.setItem("abnf-explore-prompt", "hide");
+    } catch {
+      /* The prompt can return on the next visit when storage is unavailable. */
+    }
+  };
   const discoverSite = () => {
     if (seeking) return;
     const choice = pickDiscovery(
@@ -566,20 +603,20 @@ function Explorer({ planet }: { planet: PlanetId }) {
           {selected.name[lang]}
         </button>
       )}
-      {!listVisible && !focusMode && (
+      {!listVisible && !focusMode && showDock && (
         <div className="pointer-events-none absolute top-32 left-3 z-30 max-w-[calc(100%-1.5rem)] sm:top-20 sm:max-w-[14rem]">
           <p className="text-[10px] tracking-[0.18em] text-[#f2a64a] uppercase">{viewKicker}</p>
           <p className="text-sm text-[#f4f7ff]">{viewTitle}</p>
           <p className="text-xs text-[#93a6c9]">{viewNote}</p>
-          <MissionStatus
-            kicker={t.missionControl}
-            lines={[
-              { label: t.explore, value: t[planet] },
-              ...(selected ? [{ label: t.region, value: selected.location.region ?? selected.location.locationName }] : []),
-              { label: t.sitesDiscovered, value: `${foundHere} / ${planetTotal}` },
-              ...(missionRecord ? [{ label: t.mission, value: missionRecord.name[lang] }] : []),
-            ]}
-          />
+          <div className="pointer-events-none mt-2 max-w-[16rem]" role="progressbar" aria-label={t.sitesDiscovered} aria-valuemin={0} aria-valuemax={planetTotal} aria-valuenow={foundHere}>
+            <div className="flex items-center justify-between text-[10px] text-[#c5d2ea]">
+              <span>{t.sitesDiscovered}</span>
+              <span className="text-[#f4f7ff]">{progressPercent}%</span>
+            </div>
+            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-white/10">
+              <div className="h-full rounded-full bg-[#6aa4ff] transition-[width] duration-500" style={{ width: `${progressPercent}%` }} />
+            </div>
+          </div>
           {phone && showOrient && (
             <p className="pointer-events-auto mt-2 flex items-center gap-2 text-[11px] text-[#c5d2ea]">
               {t.portraitHint}
@@ -630,6 +667,25 @@ function Explorer({ planet }: { planet: PlanetId }) {
             </div>
           </div>
         </div>
+      )}
+      {showExplorerPrompt && (
+        <aside className="absolute right-3 bottom-20 z-30 w-[min(19rem,calc(100%-1.5rem))] rounded-3xl border border-[#6aa4ff]/45 bg-[#070d1c]/92 p-4 shadow-2xl backdrop-blur-md" aria-labelledby="explore-prompt-title">
+          <p id="explore-prompt-title" className="text-[11px] tracking-[0.16em] text-[#f2a64a] uppercase">{t.discoveryPromptTitle}</p>
+          <p className="mt-2 text-sm leading-5 text-[#f4f7ff]">{t.discoveryPromptBody}</p>
+          <div className="mt-3 flex items-center gap-3">
+            <button type="button" className="min-h-11 rounded-full bg-[#3d7eff] px-4 text-sm text-[#f4f7ff]" onClick={toggleTour}>
+              {t.discoveryPromptTour}
+            </button>
+            <button type="button" className="min-h-11 text-sm text-[#c5d2ea]" onClick={dismissExplorerPrompt}>
+              {t.dismiss}
+            </button>
+          </div>
+        </aside>
+      )}
+      {milestone && (
+        <p className="pointer-events-none absolute bottom-24 left-1/2 z-40 max-w-[calc(100%-2rem)] -translate-x-1/2 rounded-full border border-[#f2a64a]/45 bg-[#070d1c]/92 px-4 py-2 text-center text-xs text-[#f4f7ff] shadow-xl" role="status">
+          {milestone}
+        </p>
       )}
       {panel && !focusMode && (
         <div className={panelClass}>
@@ -689,7 +745,7 @@ function Explorer({ planet }: { planet: PlanetId }) {
             }}
           />
         </div>
-        {webgl && (
+        {webgl && showDock && (
           <div className={`pointer-events-auto absolute left-3 z-30 ${desktop ? "bottom-19" : selected ? "bottom-[calc(78dvh+1rem)]" : "bottom-19"}`}>
             <CameraCluster
               zoomInLabel={t.zoomIn}
@@ -719,13 +775,14 @@ function Explorer({ planet }: { planet: PlanetId }) {
               aria-expanded={timelineVisible}
               aria-label={t.timeline}
               onClick={() => toggleDrawer("timeline")}
-              className={`flex h-11 w-full shrink-0 items-center gap-3 rounded-full border px-5 text-xs tracking-[0.14em] whitespace-nowrap ${timelineVisible ? "border-[#f2a64a] bg-[#f2a64a]/15 text-[#f2a64a]" : "border-white/15 bg-[#070d1c]/75 text-[#f2a64a]"}`}
+              className={`group relative flex h-12 w-full shrink-0 items-center gap-3 overflow-hidden rounded-full border px-5 text-xs tracking-[0.14em] whitespace-nowrap shadow-lg transition duration-300 hover:-translate-y-0.5 hover:border-[#f2a64a]/75 focus-visible:-translate-y-0.5 ${timelineVisible ? "border-[#f2a64a] bg-[#f2a64a]/18 text-[#f2a64a] shadow-[0_0_28px_rgba(242,166,74,0.18)]" : "border-white/15 bg-[#070d1c]/80 text-[#f2a64a]"}`}
             >
-              <span className="shrink-0">{yearMin}</span>
-              <span className="h-px min-w-6 flex-1 bg-[#f2a64a]/70" />
-              <span className="shrink-0 uppercase">{t.timeline}</span>
-              <span className="h-px min-w-6 flex-1 bg-[#f2a64a]/70" />
-              <span className="shrink-0">{yearMax}</span>
+              <span className={`absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(242,166,74,0.18),transparent_65%)] transition-opacity ${timelineVisible ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`} />
+              <span className="relative shrink-0 text-[11px] text-[#f2a64a]">{yearMin}</span>
+              <span className="relative h-px min-w-5 flex-1 bg-gradient-to-r from-[#f2a64a]/70 via-[#f2a64a] to-[#6aa4ff]/50" />
+              <span className="relative shrink-0 font-medium uppercase">{t.timeline}</span>
+              <span className="relative h-px min-w-5 flex-1 bg-gradient-to-r from-[#6aa4ff]/50 via-[#f2a64a] to-[#f2a64a]/70" />
+              <span className="relative shrink-0 text-[11px] text-[#f2a64a]">{yearMax}</span>
             </button>
           </div>
         )}

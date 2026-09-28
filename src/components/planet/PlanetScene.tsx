@@ -502,6 +502,26 @@ function CameraRig({
   );
 }
 
+/** A compact geometric silhouette keeps markers readable without loading a model for every site. */
+function BeaconGlyph({ type, color }: { type: Artifact["type"]; color: string }) {
+  const GlyphMaterial = () => <meshBasicMaterial color={color} toneMapped={false} />;
+  if (type === "rover") {
+    return (
+      <group position={[0, 0.42, 0]}>
+        <mesh scale={[1.08, 0.42, 0.72]}><GlyphMaterial /><boxGeometry args={[1, 1, 1]} /></mesh>
+        <mesh position={[0, 0.42, 0]} scale={[0.42, 0.36, 0.42]}><GlyphMaterial /><boxGeometry args={[1, 1, 1]} /></mesh>
+        <mesh position={[-0.75, -0.28, 0]} scale={[0.28, 0.28, 0.28]}><GlyphMaterial /><sphereGeometry args={[1, 10, 10]} /></mesh>
+        <mesh position={[0.75, -0.28, 0]} scale={[0.28, 0.28, 0.28]}><GlyphMaterial /><sphereGeometry args={[1, 10, 10]} /></mesh>
+      </group>
+    );
+  }
+  if (type === "lander") return <mesh position={[0, 0.48, 0]} scale={[0.82, 1, 0.82]}><GlyphMaterial /><coneGeometry args={[1, 1, 4]} /></mesh>;
+  if (type === "descent_stage") return <mesh position={[0, 0.42, 0]} scale={[0.88, 0.65, 0.88]}><GlyphMaterial /><cylinderGeometry args={[1, 1, 1, 6]} /></mesh>;
+  if (type === "instrument" || type === "experiment") return <mesh position={[0, 0.45, 0]} scale={0.82}><GlyphMaterial /><octahedronGeometry args={[1, 0]} /></mesh>;
+  if (type === "impact_hardware") return <mesh position={[0, 0.4, 0]} scale={0.88}><GlyphMaterial /><tetrahedronGeometry args={[1, 0]} /></mesh>;
+  return <mesh position={[0, 0.42, 0]} scale={[0.8, 0.8, 0.8]}><GlyphMaterial /><boxGeometry args={[1, 1, 1]} /></mesh>;
+}
+
 function Marker({
   object,
   name,
@@ -528,6 +548,7 @@ function Marker({
   const group = useRef<THREE.Group>(null);
   const ripple = useRef<THREE.Mesh>(null);
   const rippleMat = useRef<THREE.MeshBasicMaterial>(null);
+  const beamMat = useRef<THREE.MeshBasicMaterial>(null);
   const scratch = useRef(new THREE.Vector3());
   const burst = useRef(0);
   const [hot, setHot] = useState(false);
@@ -545,7 +566,9 @@ function Marker({
     return new THREE.Vector3(vector.x, vector.y, vector.z);
   }, [object.location.latitude, object.location.longitude]);
   const ringQuat = useMemo(() => new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), position.clone().normalize()), [position]);
-  const color = typeColor[object.type];
+  const beamQuat = useMemo(() => new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), position.clone().normalize()), [position]);
+  const glyphColor = typeColor[object.type];
+  const signalColor = object.status === "active" ? "#6aa4ff" : "#f2a64a";
 
   useFrame(({ camera, clock }) => {
     const mesh = group.current;
@@ -570,6 +593,7 @@ function Marker({
     if (ripple.current) ripple.current.visible = rippling;
     if (rippleMat.current) rippleMat.current.opacity = rippling ? 0.7 * (1 - revealAge) : 0;
     if (ripple.current && rippling) ripple.current.scale.setScalar(1 + revealAge * 2.4);
+    if (beamMat.current) beamMat.current.opacity = selected ? (reducedMotion ? 0.28 : 0.2 + Math.sin(clock.elapsedTime * 2.4) * 0.08) : 0;
   });
 
   return (
@@ -596,16 +620,35 @@ function Marker({
           }}
         >
           <sphereGeometry args={[1, 16, 16]} />
-          <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.75} toneMapped={false} />
+          <meshStandardMaterial color={signalColor} emissive={signalColor} emissiveIntensity={0.75} toneMapped={false} />
         </mesh>
+        <mesh scale={0.72}>
+          <sphereGeometry args={[1, 14, 14]} />
+          <meshBasicMaterial color="#10182e" toneMapped={false} />
+        </mesh>
+        <group quaternion={beamQuat}>
+          <BeaconGlyph type={object.type} color={glyphColor} />
+        </group>
+        {selected && (
+          <group quaternion={beamQuat}>
+            <mesh position={[0, 2.5, 0]}>
+              <cylinderGeometry args={[0.16, 0.56, 5, 16, 1, true]} />
+              <meshBasicMaterial ref={beamMat} color={signalColor} transparent opacity={0.28} depthWrite={false} toneMapped={false} side={THREE.DoubleSide} />
+            </mesh>
+            <mesh position={[0, 5.05, 0]}>
+              <sphereGeometry args={[0.2, 12, 12]} />
+              <meshBasicMaterial color={signalColor} transparent opacity={0.8} depthWrite={false} toneMapped={false} />
+            </mesh>
+          </group>
+        )}
         <mesh ref={ripple} visible={false} quaternion={ringQuat}>
           <ringGeometry args={[1.35, 1.7, 40]} />
-          <meshBasicMaterial ref={rippleMat} color={color} transparent opacity={0} depthWrite={false} toneMapped={false} />
+          <meshBasicMaterial ref={rippleMat} color={signalColor} transparent opacity={0} depthWrite={false} toneMapped={false} />
         </mesh>
         {selected && (
           <mesh quaternion={ringQuat}>
             <ringGeometry args={[1.55, 1.85, 48]} />
-            <meshBasicMaterial color={color} transparent opacity={0.9} depthWrite={false} toneMapped={false} />
+            <meshBasicMaterial color={signalColor} transparent opacity={0.9} depthWrite={false} toneMapped={false} />
           </mesh>
         )}
       </group>
