@@ -15,7 +15,7 @@ type Props = {
   sound?: { enabled: boolean; failed: boolean; volume: number; onToggle: () => void; onVolume: (volume: number) => void };
 };
 
-export function TopBar({ planet, onPlanet, onHelp, onFullscreen, focus, search, sound }: Props) {
+export function TopBar({ planet, onPlanet, dimmed = false, onHelp, onFullscreen, focus, search, sound }: Props) {
   const { t, lang, setLang } = useI18n();
   const exitRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -23,7 +23,7 @@ export function TopBar({ planet, onPlanet, onHelp, onFullscreen, focus, search, 
   }, [focus?.active]);
   const focused = Boolean(focus?.active);
   return (
-    <header className="relative z-30 flex h-16 items-center bg-transparent px-2 sm:px-5">
+    <header className={`relative z-30 flex h-16 items-center px-2 transition-colors duration-300 sm:px-5 ${dimmed ? "border-b border-white/10 bg-[#070d1c]/38 backdrop-blur-md" : "bg-transparent"}`}>
       <Link to="/" className="flex w-fit items-center gap-2" aria-label={t.appTitle}>
         <img src="/cosmoverse-logo.jpg" alt="" className="h-10 w-10 rounded-full object-cover ring-1 ring-white/30 shadow-[0_0_28px_rgb(106_164_255_/_0.45)] sm:h-12 sm:w-12" />
       </Link>

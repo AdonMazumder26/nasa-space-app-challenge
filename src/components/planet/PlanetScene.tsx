@@ -51,6 +51,7 @@ type SceneProps = {
   planet: PlanetId;
   objects: Artifact[];
   selectedId: string | null;
+  previewedId?: string | null;
   focusNonce: number;
   emphasisNonce: number;
   intro: boolean;
@@ -527,6 +528,7 @@ function Marker({
   name,
   caption,
   selected,
+  previewed,
   emphasisNonce,
   revealAt,
   reducedMotion,
@@ -538,6 +540,7 @@ function Marker({
   name: string;
   caption: { type: string; place: string; year: string };
   selected: boolean;
+  previewed: boolean;
   emphasisNonce: number;
   revealAt: number;
   reducedMotion: boolean;
@@ -576,12 +579,12 @@ function Marker({
     const age = (performance.now() - burst.current) / 700;
     const burstScale = !reducedMotion && age >= 0 && age < 1 ? 1 + Math.sin(age * Math.PI) * 0.55 : 1;
     const distance = camera.position.distanceTo(mesh.getWorldPosition(scratch.current));
-    const distant = !selected && distance > 2.6 ? 0.72 : 1;
-    const scale = THREE.MathUtils.clamp(distance * 0.018, 0.007, 0.036) * (selected ? 1.28 : hot ? 1.14 : 1) * burstScale * distant;
+    const distant = !selected && !previewed && distance > 2.6 ? 0.72 : 1;
+    const scale = THREE.MathUtils.clamp(distance * 0.018, 0.007, 0.036) * (selected ? 1.28 : previewed ? 1.2 : hot ? 1.14 : 1) * burstScale * distant;
     mesh.scale.setScalar(scale);
     const material = mesh.children[0] && (mesh.children[0] as THREE.Mesh).material;
     if (material && !Array.isArray(material) && "emissiveIntensity" in material) {
-      const glow = selected && !reducedMotion ? 1.2 + Math.sin(clock.elapsedTime * 3.2) * 0.28 : selected ? 1.6 : hot ? 1.15 : 0.75;
+      const glow = (selected || previewed) && !reducedMotion ? 1.2 + Math.sin(clock.elapsedTime * 3.2) * 0.28 : (selected || previewed) ? 1.6 : hot ? 1.15 : 0.75;
       material.emissiveIntensity = quiet && !selected ? glow * 0.2 : glow;
       if ("opacity" in material && "transparent" in material) {
         material.transparent = quiet && !selected;
@@ -629,7 +632,7 @@ function Marker({
         <group quaternion={beamQuat}>
           <BeaconGlyph type={object.type} color={glyphColor} />
         </group>
-        {selected && (
+        {(selected || previewed) && (
           <group quaternion={beamQuat}>
             <mesh position={[0, 2.5, 0]}>
               <cylinderGeometry args={[0.16, 0.56, 5, 16, 1, true]} />
@@ -729,6 +732,7 @@ function sameIds(left: readonly string[], right: readonly string[]) {
 function MarkerLayer({
   objects,
   selectedId,
+  previewedId,
   emphasisNonce,
   reducedMotion,
   skipEmpty,
@@ -745,6 +749,7 @@ function MarkerLayer({
 }: {
   objects: Artifact[];
   selectedId: string | null;
+  previewedId?: string | null;
   emphasisNonce: number;
   reducedMotion: boolean;
   skipEmpty: { current: boolean };
@@ -816,9 +821,10 @@ function MarkerLayer({
       const inside = angle !== null && facing > threshold;
       if (inside) inView += 1;
       const selected = object.id === selectedId;
+      const previewed = object.id === previewedId;
       const remembered = known.has(object.id);
       const inMission = missionIds.includes(object.id);
-      if (!discovery || selected || remembered || inside || inMission) visibleIds.push(object.id);
+      if (!discovery || selected || previewed || remembered || inside || inMission) visibleIds.push(object.id);
       if (discovery && inside && !selected && !remembered && !shownRef.current.includes(object.id)) {
         fresh.push({ id: object.id, facing });
       }
@@ -876,6 +882,7 @@ function MarkerLayer({
           name={labelFor(object)}
           caption={captionFor(object) ?? emptyCaption}
           selected={object.id === selectedId}
+          previewed={object.id === previewedId}
           emphasisNonce={emphasisNonce}
           revealAt={pulses[object.id] ?? 0}
           reducedMotion={reducedMotion}
@@ -1143,6 +1150,7 @@ function SceneContents(props: SceneProps) {
         <MarkerLayer
           objects={props.objects}
           selectedId={props.selectedId}
+          previewedId={props.previewedId}
           emphasisNonce={props.emphasisNonce}
           reducedMotion={props.reducedMotion}
           skipEmpty={skipEmpty}

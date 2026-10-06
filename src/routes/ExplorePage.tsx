@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { LuBookOpen, LuCompass, LuEye, LuList, LuMenu, LuMinus, LuPlay, LuPlus, LuRefreshCw, LuRotateCcw, LuX } from "react-icons/lu";
+import { LuBookOpen, LuBox, LuCompass, LuEye, LuList, LuMenu, LuMinus, LuPlay, LuPlus, LuRefreshCw, LuRotateCcw, LuX } from "react-icons/lu";
 import { ObjectList } from "../components/object/ObjectList";
+import { ModelGallery } from "../components/object/ModelGallery";
 import { StoryPanel } from "../components/object/StoryPanel";
 import { PlanetViewport, webglAvailable, type SceneHandle } from "../components/planet/PlanetScene";
 import { SearchBox } from "../components/search/SearchBox";
@@ -30,6 +31,7 @@ import {
   type SurfaceView,
 } from "../lib/exploration";
 import { catalogYearBounds, filterObjects, missionById } from "../lib/filtering";
+import { artifactModels } from "../data/artifactModels";
 import type { Artifact, Filters, PlanetId, TimelineEvent } from "../types/catalog";
 
 export function ExplorePage() {
@@ -52,6 +54,7 @@ function Explorer({ planet }: { planet: PlanetId }) {
   const [filters, setFilters] = useState<Filters>({ types: [], statuses: [], missionId: null, throughYear: bounds.max });
   const [autoRotate, setAutoRotate] = useState(!reduced);
   const [drawer, setDrawer] = useState<"list" | "timeline" | null>(null);
+  const [timelinePreview, setTimelinePreview] = useState<TimelineEvent | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [focusNonce, setFocusNonce] = useState(0);
   const [emphasisNonce, setEmphasisNonce] = useState(0);
@@ -67,6 +70,7 @@ function Explorer({ planet }: { planet: PlanetId }) {
   const [seeking, setSeeking] = useState(false);
   const [archiveFull, setArchiveFull] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
+  const [modelGalleryOpen, setModelGalleryOpen] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
   const [handoff, setHandoff] = useState<PlanetId | null>(null);
   const [live, setLive] = useState("");
@@ -244,6 +248,7 @@ function Explorer({ planet }: { planet: PlanetId }) {
 
   const applySelection = (object: Artifact, reveal = true, missionId?: string) => {
     remember([object.id]);
+    soundscape.effect("flight");
     if (!reduced) setFlight("locating");
     if (reveal) {
       const arrival = yearOf(missionById(catalog.missions, object.missionId)?.arrivalDate) ?? filters.throughYear;
@@ -291,6 +296,7 @@ function Explorer({ planet }: { planet: PlanetId }) {
     const year = Number(event.date.slice(0, 4));
     setFilters((current) => ({ ...current, throughYear: Math.max(current.throughYear, year) }));
     setEmphasisNonce((value) => value + 1);
+    setTimelinePreview(null);
     selectObject(object);
   };
 
@@ -328,9 +334,11 @@ function Explorer({ planet }: { planet: PlanetId }) {
 
   const toggleTour = () => {
     if (tour) {
+      soundscape.effect("ui");
       setTour(false);
       return;
     }
+    soundscape.effect("ui");
     setFilters({ types: [], statuses: [], missionId: null, throughYear: bounds.max });
     setDrawer(null);
     dismissExplorerPrompt();
@@ -339,6 +347,7 @@ function Explorer({ planet }: { planet: PlanetId }) {
 
   const switchPlanet = (next: PlanetId) => {
     if (next === planet || veil) return;
+    soundscape.effect("transition");
     if (reduced) {
       navigate(`/explore/${next}`);
       return;
@@ -457,6 +466,7 @@ function Explorer({ planet }: { planet: PlanetId }) {
     );
     seekTurn.current += 1;
     if (!choice) {
+      soundscape.effect("ui");
       setArchiveFull(true);
       setPanel("log");
       return;
@@ -467,6 +477,7 @@ function Explorer({ planet }: { planet: PlanetId }) {
     setPanel(null);
     const go = () => {
       setSeeking(false);
+      soundscape.effect("discover");
       selectObject(object, false);
     };
     if (reduced) go();
@@ -488,7 +499,12 @@ function Explorer({ planet }: { planet: PlanetId }) {
   };
 
   const toggleDrawer = (nextDrawer: "list" | "timeline") => {
-    setDrawer((current) => (current === nextDrawer ? null : nextDrawer));
+    soundscape.effect("ui");
+    setDrawer((current) => {
+      const next = current === nextDrawer ? null : nextDrawer;
+      if (next !== "timeline") setTimelinePreview(null);
+      return next;
+    });
   };
 
   const worlds = (["moon", "mars"] as const).map((world) => {
@@ -534,6 +550,7 @@ function Explorer({ planet }: { planet: PlanetId }) {
           planet={planet}
           objects={markers}
           selectedId={selected?.id ?? null}
+          previewedId={timelinePreview?.objectId ?? null}
           focusNonce={focusNonce}
           siteFrame={focusMode ? { right: 0, up: 0 } : desktop ? { right: -0.16, up: 0 } : { right: 0, up: 0.22 }}
           guideSite={
@@ -590,7 +607,7 @@ function Explorer({ planet }: { planet: PlanetId }) {
       <TopBar
         planet={planet}
         onPlanet={switchPlanet}
-        dimmed={Boolean(selected)}
+        dimmed={Boolean(selected || listVisible || timelineVisible || panel || modelGalleryOpen || toolsOpen || helpOpen)}
         search={<SearchBox objects={catalog.objects} missions={catalog.missions} onSelect={(object) => selectObject(object)} />}
         onHelp={() => setHelpOpen(true)}
         onFullscreen={toggleFullscreen}
@@ -643,7 +660,7 @@ function Explorer({ planet }: { planet: PlanetId }) {
             </div>
           )}
           <div className="pointer-events-auto mt-3 flex w-fit flex-col items-start gap-2">
-            <IconTool label={t.exploreTools} pressed={toolsOpen} expanded={toolsOpen} onClick={() => setToolsOpen((value) => !value)}>
+            <IconTool label={t.exploreTools} pressed={toolsOpen} expanded={toolsOpen} onClick={() => { soundscape.effect("ui"); setToolsOpen((value) => !value); }}>
               {toolsOpen ? <LuX aria-hidden="true" /> : <LuMenu aria-hidden="true" />}
             </IconTool>
             <div inert={toolsOpen ? undefined : true} className={`mt-2 flex flex-col gap-2 transition-[opacity,transform] duration-300 ease-out ${toolsOpen ? "opacity-100" : "pointer-events-none -translate-y-2 opacity-0"} ${reduced ? "transition-none" : ""}`}>
@@ -654,14 +671,17 @@ function Explorer({ planet }: { planet: PlanetId }) {
                 <IconTool label={tour ? t.stopTour : t.tour} pressed={tour} onClick={toggleTour}>
                   <LuPlay aria-hidden="true" />
                 </IconTool>
-                <IconTool label={discovery ? t.discovery : t.showAllSites} pressed={discovery} onClick={() => setDiscovery((value) => !value)}>
+                <IconTool label={discovery ? t.discovery : t.showAllSites} pressed={discovery} onClick={() => { soundscape.effect("ui"); setDiscovery((value) => !value); }}>
                   <LuEye aria-hidden="true" />
                 </IconTool>
                 <IconTool label={seeking ? t.searchingArchive : selected ? t.discoverAnother : t.discoverSomething} onClick={discoverSite}>
                   <LuCompass aria-hidden="true" />
                 </IconTool>
-                <IconTool label={t.explorerLog} pressed={panel === "log"} onClick={() => setPanel((current) => (current === "log" ? null : "log"))}>
+                <IconTool label={t.explorerLog} pressed={panel === "log"} onClick={() => { soundscape.effect("ui"); setPanel((current) => (current === "log" ? null : "log")); }}>
                   <LuBookOpen aria-hidden="true" />
+                </IconTool>
+                <IconTool label={t.modelGallery} pressed={modelGalleryOpen} onClick={() => { soundscape.effect("ui"); setModelGalleryOpen(true); }}>
+                  <LuBox aria-hidden="true" />
                 </IconTool>
               </div>
             </div>
@@ -718,6 +738,7 @@ function Explorer({ planet }: { planet: PlanetId }) {
           )}
         </div>
       )}
+      {modelGalleryOpen && !focusMode && <ModelGallery models={artifactModels} onClose={() => setModelGalleryOpen(false)} />}
       {(seeking || (selected && flight !== "idle")) && (
         <p className="pointer-events-none absolute bottom-24 left-1/2 z-30 -translate-x-1/2 text-[11px] tracking-[0.22em] text-[#f2a64a] uppercase">
           {seeking ? t.searchingArchive : flight === "locating" ? t.locatingSite : t.targetAcquired}
@@ -753,13 +774,14 @@ function Explorer({ planet }: { planet: PlanetId }) {
               resetLabel={t.resetView}
               spinLabel={t.autoRotate}
               spinning={autoRotate}
-              onZoomIn={() => sceneRef.current?.zoomIn()}
-              onZoomOut={() => sceneRef.current?.zoomOut()}
+              onZoomIn={() => { soundscape.effect("zoom"); sceneRef.current?.zoomIn(); }}
+              onZoomOut={() => { soundscape.effect("zoom"); sceneRef.current?.zoomOut(); }}
               onReset={() => {
+                soundscape.effect("reset");
                 if (selectedIdRef.current) closeStory();
                 else sceneRef.current?.reset();
               }}
-              onSpin={() => setAutoRotate((value) => !value)}
+              onSpin={() => { soundscape.effect("rotate"); setAutoRotate((value) => !value); }}
             />
           </div>
         )}
@@ -767,7 +789,7 @@ function Explorer({ planet }: { planet: PlanetId }) {
           <div className="pointer-events-auto absolute inset-x-3 bottom-3 z-30">
             {timelineVisible && (
               <div className="mb-2">
-                <TimelineBar events={events} activeId={selected?.id ?? null} onSelect={openEvent} />
+                <TimelineBar planet={planet} events={events} activeId={selected?.id ?? null} onSelect={openEvent} onPreview={setTimelinePreview} />
               </div>
             )}
             <button

@@ -1,4 +1,5 @@
 export type SoundPref = { enabled: boolean; volume: number };
+export type SoundEffect = "ui" | "flight" | "zoom" | "reset" | "rotate" | "discover" | "transition";
 
 const STORAGE_KEY = "abnf-sound";
 const DEFAULT_PREF: SoundPref = { enabled: true, volume: 0.55 };
@@ -214,6 +215,33 @@ class Soundscape {
     if (this.planet === planet) return;
     this.planet = planet;
     this.syncBed();
+  }
+
+  effect(kind: SoundEffect) {
+    if (!this.ctx || !this.master || !this.pref.enabled || this.ctx.state !== "running") return;
+    const profiles: Record<SoundEffect, { start: number; end: number; duration: number; peak: number; type: OscillatorType }> = {
+      ui: { start: 520, end: 680, duration: 0.08, peak: 0.08, type: "sine" },
+      flight: { start: 180, end: 420, duration: 0.28, peak: 0.12, type: "sine" },
+      zoom: { start: 320, end: 460, duration: 0.1, peak: 0.07, type: "triangle" },
+      reset: { start: 460, end: 220, duration: 0.16, peak: 0.08, type: "sine" },
+      rotate: { start: 260, end: 340, duration: 0.12, peak: 0.06, type: "triangle" },
+      discover: { start: 520, end: 820, duration: 0.2, peak: 0.1, type: "sine" },
+      transition: { start: 140, end: 220, duration: 0.24, peak: 0.08, type: "sine" },
+    };
+    const profile = profiles[kind];
+    const start = this.ctx.currentTime;
+    const oscillator = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    oscillator.type = profile.type;
+    oscillator.frequency.setValueAtTime(profile.start, start);
+    oscillator.frequency.exponentialRampToValueAtTime(profile.end, start + profile.duration);
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(profile.peak, start + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + profile.duration);
+    oscillator.connect(gain);
+    gain.connect(this.master);
+    oscillator.start(start);
+    oscillator.stop(start + profile.duration + 0.02);
   }
 
   private syncBed() {
