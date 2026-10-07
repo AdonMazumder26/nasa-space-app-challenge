@@ -1,7 +1,7 @@
 {
-  "name": "Abandoned but not Forgotten",
-  "short_name": "Not Forgotten",
-  "description": "A 3D museum of documented hardware left on the Moon and Mars.",
+  "name": "Beyond the Signal",
+  "short_name": "Beyond the Signal",
+  "description": "Mapping the machines humanity left behind on the Moon and Mars.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

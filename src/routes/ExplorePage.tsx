@@ -14,6 +14,7 @@ import { roverRoutes } from "../data/roverRoutes";
 import { useI18n } from "../features/localization/LanguageContext";
 import { fillCopy } from "../features/localization/strings";
 import { useMinWidth, usePrefersReducedMotion } from "../hooks/usePrefersReducedMotion";
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useSound } from "../hooks/useSound";
 import { soundscape } from "../lib/audio";
 import { speakCatalogLine, stopNarration } from "../lib/narration";
@@ -225,6 +226,22 @@ function Explorer({ planet }: { planet: PlanetId }) {
   const missionMembers = missionFocus
     ? catalog.objects.filter((object) => object.planet === planet && object.missionId === missionFocus)
     : [];
+
+  const exploreTitle = useMemo(() => {
+    if (drawer === "timeline") {
+      return "Timeline";
+    }
+    if (selected) {
+      if (missionFocus === selected.missionId) {
+        const mission = missionById(catalog.missions, selected.missionId);
+        return mission ? mission.name[lang] : selected.name[lang];
+      }
+      return selected.name[lang];
+    }
+    return "Explore the Moon & Mars";
+  }, [drawer, selected, missionFocus, lang]);
+
+  usePageTitle(exploreTitle);
   const markers = [...filtered];
   for (const object of [selected, ...missionMembers]) {
     if (object && !markers.some((item) => item.id === object.id)) markers.push(object);
@@ -567,6 +584,7 @@ function Explorer({ planet }: { planet: PlanetId }) {
           surfaceError={t.surfaceUnavailable}
           retryLabel={t.retry}
           clusterHint={t.clusterChoose}
+          clickHint={t.clickToExplore}
           labelFor={(object) => object.name[lang]}
           captionFor={(object) => {
             const year = yearOf(missionById(catalog.missions, object.missionId)?.arrivalDate);

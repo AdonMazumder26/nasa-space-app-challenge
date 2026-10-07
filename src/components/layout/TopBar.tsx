@@ -2,6 +2,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { LuBookOpen, LuExpand, LuInfo, LuMaximize, LuMoon, LuShrink, LuVolume2, LuVolumeX } from "react-icons/lu";
 import { useI18n } from "../../features/localization/LanguageContext";
+import { BRAND } from "../../constants/branding";
 import type { PlanetId } from "../../types/catalog";
 
 type Props = {
@@ -24,8 +25,13 @@ export function TopBar({ planet, onPlanet, dimmed = false, onHelp, onFullscreen,
   const focused = Boolean(focus?.active);
   return (
     <header className={`relative z-30 flex h-16 items-center px-2 transition-colors duration-300 sm:px-5 ${dimmed ? "border-b border-white/10 bg-[#070d1c]/38 backdrop-blur-md" : "bg-transparent"}`}>
-      <Link to="/" className="flex w-fit items-center gap-2" aria-label={t.appTitle}>
-        <img src="/cosmoverse-logo.jpg" alt="" className="h-10 w-10 rounded-full object-cover ring-1 ring-white/30 shadow-[0_0_28px_rgb(106_164_255_/_0.45)] sm:h-12 sm:w-12" />
+      <Link to="/" className="flex w-fit flex-col justify-center shrink-0" aria-label={BRAND.PROJECT_NAME}>
+        <span className="font-display text-sm font-semibold tracking-wider text-[#f4f7ff] uppercase sm:text-base leading-none">
+          {BRAND.PROJECT_DISPLAY_NAME}
+        </span>
+        <span className="hidden text-[9px] font-mono tracking-[0.2em] text-[#f2a64a] uppercase md:block mt-1">
+          {BRAND.CHALLENGE_SHORT}
+        </span>
       </Link>
       {planet && onPlanet && (
         <div className="absolute top-[4.25rem] left-3 flex items-center rounded-full border border-white/15 bg-black/45 p-1 shadow-lg backdrop-blur-sm sm:top-auto sm:left-1/2 sm:-translate-x-1/2" role="group" aria-label={t.explore}>
