@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArchiveIntro, markIntroSeen } from "../components/layout/ArchiveIntro";
 import { PlanetViewport, type SceneHandle } from "../components/planet/PlanetScene";
 import { TopBar } from "../components/layout/TopBar";
@@ -14,6 +14,7 @@ export function LandingPage() {
   const reduced = usePrefersReducedMotion();
   const sound = useSound();
   const sceneRef = useRef<SceneHandle | null>(null);
+  const [surfaceReady, setSurfaceReady] = useState(false);
 
   useEffect(() => {
     soundscape.setPlanet("moon");
@@ -29,10 +30,13 @@ export function LandingPage() {
         focusNonce={0}
         emphasisNonce={0}
         intro
+        introDelay={250}
+        introReady={surfaceReady}
         autoRotate
         reducedMotion={reduced}
         errorMessage={t.sceneError}
         loadingLabel={t.loadingSurface}
+        onSurfaceReady={() => setSurfaceReady(true)}
         surfaceError={t.surfaceUnavailable}
         retryLabel={t.retry}
         clusterHint={t.clusterChoose}

@@ -2,7 +2,7 @@ import { OrbitControls, useProgress, useTexture, Html } from "@react-three/drei"
 import { GuideAstronaut } from "../astronaut/GuideAstronaut";
 import { StarField } from "./StarField";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Component, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Component, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { roverRoutes } from "../../data/roverRoutes";
@@ -55,10 +55,13 @@ type SceneProps = {
   focusNonce: number;
   emphasisNonce: number;
   intro: boolean;
+  introDelay?: number;
+  introReady?: boolean;
   autoRotate: boolean;
   reducedMotion: boolean;
   errorMessage: string;
   loadingLabel: string;
+  onSurfaceReady?: () => void;
   surfaceError: string;
   retryLabel: string;
   clusterHint: string;
@@ -276,6 +279,8 @@ function CameraRig({
   selected,
   focusNonce,
   intro,
+  introDelay = 0,
+  introReady = true,
   autoRotate,
   reducedMotion,
   skipEmpty,
@@ -290,6 +295,8 @@ function CameraRig({
   selected: Artifact | null;
   focusNonce: number;
   intro: boolean;
+  introDelay?: number;
+  introReady?: boolean;
   autoRotate: boolean;
   reducedMotion: boolean;
   skipEmpty: { current: boolean };
@@ -320,7 +327,7 @@ function CameraRig({
     spin: new THREE.Quaternion(),
   });
   const idle = useRef<number | null>(null);
-  spinGate.current = autoRotate && !reducedMotion && !interacting && !focusing && !selected;
+  spinGate.current = autoRotate && !reducedMotion && !interacting && !selected && (intro || !focusing);
 
   const applyDistance = (nextDistance: number) => {
     const distance = camera.position.length() || 1;
@@ -355,15 +362,18 @@ function CameraRig({
       const from = home.clone().multiplyScalar(1.62);
       camera.position.copy(from);
       controls.current?.update();
-      focus.current = { from, to: home, started: performance.now(), selected: false };
-      setFocusing(true);
-      return;
+      if (!introReady) return;
+      const timer = window.setTimeout(() => {
+        focus.current = { from, to: home, started: performance.now(), selected: false };
+        setFocusing(true);
+      }, introDelay);
+      return () => window.clearTimeout(timer);
     }
     focus.current = null;
     setFocusing(false);
     camera.position.copy(home);
     controls.current?.update();
-  }, [planet, camera, intro, reducedMotion]);
+  }, [planet, camera, intro, introDelay, introReady, reducedMotion]);
 
   useLayoutEffect(() => {
     const home = DEFAULT_OFFSET.clone();
@@ -901,46 +911,46 @@ function MarkerLayer({
           return gap > 0.03;
         })
         .map((cluster) => (
-        <Html key={cluster.id} position={cluster.position} center zIndexRange={[20, 0]} style={{ pointerEvents: "auto" }}>
-          <div onPointerDown={(event) => event.stopPropagation()}>
-            <button
-              type="button"
-              className="grid h-7 min-w-7 place-items-center rounded-full border border-white/30 bg-black/75 px-2 text-xs text-[#f4f7ff]"
-              onClick={(event) => {
-                event.stopPropagation();
-                setOpenId((current) => (current === cluster.id ? null : cluster.id));
-              }}
-            >
-              {cluster.objectIds.length}
-            </button>
-            {openId === cluster.id && (
-              <div className="mt-2 w-52 rounded-xl border border-white/15 bg-[#10182e]/95 p-2 text-left shadow-xl">
-                <p className="px-1 pb-1 text-[11px] leading-4 text-[#93a6c9]">{clusterHint}</p>
-                <ul>
-                  {cluster.objectIds.map((id) => {
-                    const object = byId.get(id);
-                    if (!object) return null;
-                    return (
-                      <li key={id}>
-                        <button
-                          type="button"
-                          className="block w-full rounded-lg px-2 py-1.5 text-left text-sm hover:bg-white/10"
-                          onClick={() => {
-                            setOpenId(null);
-                            onSelect(id);
-                          }}
-                        >
-                          {labelFor(object)}
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            )}
-          </div>
-        </Html>
-      ))}
+          <Html key={cluster.id} position={cluster.position} center zIndexRange={[20, 0]} style={{ pointerEvents: "auto" }}>
+            <div onPointerDown={(event) => event.stopPropagation()}>
+              <button
+                type="button"
+                className="grid h-7 min-w-7 place-items-center rounded-full border border-white/30 bg-black/75 px-2 text-xs text-[#f4f7ff]"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setOpenId((current) => (current === cluster.id ? null : cluster.id));
+                }}
+              >
+                {cluster.objectIds.length}
+              </button>
+              {openId === cluster.id && (
+                <div className="mt-2 w-52 rounded-xl border border-white/15 bg-[#10182e]/95 p-2 text-left shadow-xl">
+                  <p className="px-1 pb-1 text-[11px] leading-4 text-[#93a6c9]">{clusterHint}</p>
+                  <ul>
+                    {cluster.objectIds.map((id) => {
+                      const object = byId.get(id);
+                      if (!object) return null;
+                      return (
+                        <li key={id}>
+                          <button
+                            type="button"
+                            className="block w-full rounded-lg px-2 py-1.5 text-left text-sm hover:bg-white/10"
+                            onClick={() => {
+                              setOpenId(null);
+                              onSelect(id);
+                            }}
+                          >
+                            {labelFor(object)}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </Html>
+        ))}
     </>
   );
 }
@@ -967,12 +977,52 @@ function SpinningBody({
   return <group ref={ref}>{children}</group>;
 }
 
-function SurfaceLoader({ label }: { label: string }) {
+function SurfaceLoader({ label, reducedMotion, onComplete }: { label: string; reducedMotion: boolean; onComplete?: () => void }) {
   const { active, progress } = useProgress();
+  const completed = useRef(false);
+  useEffect(() => {
+    if (active) {
+      completed.current = true;
+      return;
+    }
+    if (completed.current) {
+      completed.current = false;
+      onComplete?.();
+    }
+  }, [active, onComplete]);
   if (!active) return null;
+  const title = "NASA Space App Challenge";
   return (
-    <div role="status" className="pointer-events-none absolute bottom-28 left-1/2 z-20 -translate-x-1/2 rounded-full border border-white/10 bg-black/70 px-4 py-2 text-xs tracking-wide text-[#f4f7ff]">
-      {label} {Math.round(progress)}%
+    <div role="status" aria-live="polite" className="pointer-events-none absolute inset-0 z-20 grid place-items-center overflow-hidden bg-[#070d1c] px-6">
+      <div className="surface-preloader-orbit absolute h-[min(72vw,30rem)] w-[min(72vw,30rem)] rounded-full border border-[#6aa4ff]/20" aria-hidden="true" />
+      <div className="surface-preloader-orbit surface-preloader-orbit-delayed absolute h-[min(52vw,22rem)] w-[min(52vw,22rem)] rounded-full border border-[#f2a64a]/20" aria-hidden="true" />
+      <div className="surface-preloader-glow absolute h-40 w-40 rounded-full bg-[#3d7eff]/20 blur-3xl" aria-hidden="true" />
+      <div className="relative w-full max-w-md text-center">
+        <div className="mx-auto flex w-fit items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[10px] tracking-[0.2em] text-[#c5d2ea] uppercase">
+          <span className="h-1.5 w-1.5 rounded-full bg-[#6aa4ff] shadow-[0_0_12px_#6aa4ff]" aria-hidden="true" />
+          {label}
+        </div>
+        <h2 className="mt-5 font-display text-3xl leading-tight text-[#f4f7ff] sm:text-5xl" aria-label={title}>
+          {Array.from(title).map((character, index) => (
+            <span key={`${character}-${index}`} className={reducedMotion ? "" : "surface-preloader-letter"} style={reducedMotion ? undefined : { animationDelay: `${index * 45}ms` }} aria-hidden="true">
+              {character === " " ? "\u00a0" : character}
+            </span>
+          ))}
+        </h2>
+        <div className="cosmic-progress mx-auto mt-7" aria-hidden="true" style={{ "--cosmic-progress": `${progress}%` } as CSSProperties}>
+          <div className="cosmic-progress-star" />
+          <div className="cosmic-progress-orbit cosmic-progress-orbit-outer">
+            <span className="cosmic-progress-node cosmic-progress-node-1" />
+            <span className="cosmic-progress-node cosmic-progress-node-2" />
+            <span className="cosmic-progress-node cosmic-progress-node-3" />
+          </div>
+          <div className="cosmic-progress-orbit cosmic-progress-orbit-inner">
+            <span className="cosmic-progress-node cosmic-progress-node-4" />
+            <span className="cosmic-progress-node cosmic-progress-node-5" />
+          </div>
+        </div>
+        <p className="mt-4 text-xs tracking-[0.12em] text-[#c5d2ea]">{Math.round(progress)}% · {title}</p>
+      </div>
     </div>
   );
 }
@@ -1174,6 +1224,8 @@ function SceneContents(props: SceneProps) {
         selected={selected}
         focusNonce={props.focusNonce}
         intro={props.intro}
+        introDelay={props.introDelay}
+        introReady={props.introReady}
         autoRotate={props.autoRotate}
         reducedMotion={props.reducedMotion}
         skipEmpty={skipEmpty}
@@ -1216,7 +1268,7 @@ export function PlanetViewport(props: SceneProps) {
             onTextureFail={() => setTextureFailed(true)}
           />
         </Canvas>
-        <SurfaceLoader label={props.loadingLabel} />
+        <SurfaceLoader label={props.loadingLabel} reducedMotion={props.reducedMotion} onComplete={props.onSurfaceReady} />
         {textureFailed && (
           <div role="alert" className="absolute bottom-28 left-1/2 z-30 flex -translate-x-1/2 items-center gap-3 rounded-2xl border border-white/15 bg-[#070d1c]/90 px-4 py-3 text-sm text-[#f4f7ff]">
             <p>{props.surfaceError}</p>
