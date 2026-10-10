@@ -2,7 +2,7 @@ import { OrbitControls, useProgress, useTexture, Html } from "@react-three/drei"
 import { GuideAstronaut } from "../astronaut/GuideAstronaut";
 import { StarField } from "./StarField";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Component, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Component, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { roverRoutes } from "../../data/roverRoutes";
@@ -155,16 +155,16 @@ class TextureBoundary extends Component<{ children: ReactNode; fallback: ReactNo
   }
 }
 
-function FallbackSphere({ planet }: { planet: PlanetId }) {
+function FallbackSphere({ planet, onSurfacePointerMove }: { planet: PlanetId; onSurfacePointerMove?: () => void }) {
   return (
-    <mesh>
+    <mesh onPointerMove={onSurfacePointerMove}>
       <sphereGeometry args={[1, 64, 64]} />
       <meshStandardMaterial color={planet === "moon" ? "#c8c3b8" : "#a3543c"} roughness={0.9} />
     </mesh>
   );
 }
 
-function TexturedPlanet({ planet }: { planet: PlanetId }) {
+function TexturedPlanet({ planet, onSurfacePointerMove }: { planet: PlanetId; onSurfacePointerMove?: () => void }) {
   const preview = useTexture(previewUrl[planet]);
   preview.colorSpace = THREE.SRGBColorSpace;
   preview.anisotropy = 16;
@@ -192,7 +192,7 @@ function TexturedPlanet({ planet }: { planet: PlanetId }) {
 
   const map = full ?? preview;
   return (
-    <mesh>
+    <mesh onPointerMove={onSurfacePointerMove}>
       <sphereGeometry args={[1, 96, 96]} />
       <meshStandardMaterial
         map={map}
@@ -290,6 +290,7 @@ function CameraRig({
   spinAngle,
   spinGate,
   onEmptyClick,
+  onInteract,
   onFlight,
   siteFrame,
 }: {
@@ -307,6 +308,7 @@ function CameraRig({
   spinAngle: { current: number };
   spinGate: { current: boolean };
   onEmptyClick: () => void;
+  onInteract?: () => void;
   onFlight?: (phase: FlightPhase) => void;
   siteFrame: { right: number; up: number };
 }) {
@@ -439,6 +441,7 @@ function CameraRig({
       originX = event.clientX;
       originY = event.clientY;
       dragged = false;
+      onInteract?.();
     };
     const move = (event: PointerEvent) => {
       if (Math.hypot(event.clientX - originX, event.clientY - originY) > 8) {
@@ -459,7 +462,7 @@ function CameraRig({
       gl.domElement.removeEventListener("pointermove", move);
       gl.domElement.removeEventListener("pointerup", up);
     };
-  }, [gl, skipEmpty]);
+  }, [gl, skipEmpty, onInteract]);
 
   useFrame(() => {
     const anim = focus.current;
@@ -481,6 +484,9 @@ function CameraRig({
     controls.current.target.set(0, 0, 0);
     controls.current.update();
     if (t >= 1) {
+      camera.position.copy(anim.to);
+      controls.current.target.set(0, 0, 0);
+      controls.current.update();
       focus.current = null;
       queueMicrotask(() => {
         setFocusing(false);
@@ -511,6 +517,7 @@ function CameraRig({
       onStart={() => {
         if (idle.current) window.clearTimeout(idle.current);
         setInteracting(true);
+        onInteract?.();
       }}
       onEnd={() => {
         idle.current = window.setTimeout(() => setInteracting(false), reducedMotion ? 0 : 1100);
@@ -643,6 +650,8 @@ function Marker({
   quiet,
   skipEmpty,
   customPosition,
+  isHovered = false,
+  onHover,
   onSelect,
 }: {
   object: Artifact;
@@ -657,6 +666,8 @@ function Marker({
   quiet: boolean;
   skipEmpty: { current: boolean };
   customPosition?: THREE.Vector3;
+  isHovered?: boolean;
+  onHover?: (hovered: boolean) => void;
   onSelect: (id: string) => void;
 }) {
   const group = useRef<THREE.Group>(null);
@@ -668,7 +679,6 @@ function Marker({
   const restingBeamMat = useRef<THREE.MeshBasicMaterial>(null);
   const scratch = useRef(new THREE.Vector3());
   const burst = useRef(0);
-  const [hot, setHot] = useState(false);
   const [labelReady, setLabelReady] = useState(false);
   useEffect(() => setLabelReady(true), []);
 
@@ -698,13 +708,13 @@ function Marker({
     const burstScale = !reducedMotion && age >= 0 && age < 1 ? 1 + Math.sin(age * Math.PI) * 0.35 : 1;
     const distance = camera.position.distanceTo(mesh.getWorldPosition(scratch.current));
     // Maintain crisp angular size from high orbit without shrinking away:
-    const scale = THREE.MathUtils.clamp(distance * 0.009, 0.0065, 0.022) * (selected ? 1.3 : previewed ? 1.2 : hot ? 1.15 : 1) * burstScale;
+    const scale = THREE.MathUtils.clamp(distance * 0.009, 0.0065, 0.022) * (selected ? 1.3 : previewed ? 1.2 : isHovered ? 1.15 : 1) * burstScale;
     mesh.scale.setScalar(scale);
 
     const material = mesh.children[0] && (mesh.children[0] as THREE.Mesh).material;
     if (material && !Array.isArray(material) && "emissiveIntensity" in material) {
       const statusWave = reducedMotion ? 1 : object.status === "communication_lost" || object.status === "inactive" ? 0.72 + Math.sin(clock.elapsedTime * 0.8) * 0.22 : object.status === "impacted" || object.status === "destroyed" ? 0.86 + Math.sin(clock.elapsedTime * 3.6) * 0.16 : object.status === "mission_complete" ? 0.9 + Math.sin(clock.elapsedTime * 1.2) * 0.12 : 1;
-      const glow = ((selected || previewed) && !reducedMotion ? 1.8 + Math.sin(clock.elapsedTime * 3.2) * 0.35 : (selected || previewed) ? 2.2 : hot ? 1.6 : 1.25) * statusWave;
+      const glow = ((selected || previewed) && !reducedMotion ? 1.8 + Math.sin(clock.elapsedTime * 3.2) * 0.35 : (selected || previewed) ? 2.2 : isHovered ? 1.6 : 1.25) * statusWave;
       material.emissiveIntensity = quiet && !selected ? glow * 0.28 : glow;
       if ("opacity" in material && "transparent" in material) {
         material.transparent = quiet && !selected;
@@ -716,7 +726,7 @@ function Marker({
     if (!reducedMotion && signalWave.current && signalWaveMat.current) {
       const cycle = ((clock.elapsedTime * 0.75 + Math.abs(position.x * 3.5)) % 2.4) / 2.4;
       signalWave.current.scale.setScalar(1 + cycle * 1.6);
-      signalWaveMat.current.opacity = (1 - cycle) * (selected ? 0.75 : hot ? 0.55 : 0.38);
+      signalWaveMat.current.opacity = (1 - cycle) * (selected ? 0.75 : isHovered ? 0.55 : 0.38);
     }
 
     // Reveal ripple animation
@@ -733,7 +743,7 @@ function Marker({
 
     // Resting telemetry needle
     if (restingBeamMat.current) {
-      restingBeamMat.current.opacity = hot ? 0.75 : 0.5;
+      restingBeamMat.current.opacity = isHovered ? 0.75 : 0.5;
     }
   });
 
@@ -741,13 +751,13 @@ function Marker({
     <group position={position}>
       <group ref={group}>
         {/* Ground radar target reticle */}
-        <mesh quaternion={ringQuat}>
+        <mesh quaternion={ringQuat} raycast={() => null}>
           <ringGeometry args={[1.05, 1.28, 36]} />
-          <meshBasicMaterial color={signalColor} transparent opacity={selected ? 0.9 : hot ? 0.7 : 0.45} depthWrite={false} toneMapped={false} />
+          <meshBasicMaterial color={signalColor} transparent opacity={selected ? 0.9 : isHovered ? 0.7 : 0.45} depthWrite={false} toneMapped={false} />
         </mesh>
 
         {/* Continuous signal echo wave ("Beyond the Signal") */}
-        <mesh ref={signalWave} quaternion={ringQuat}>
+        <mesh ref={signalWave} quaternion={ringQuat} raycast={() => null}>
           <ringGeometry args={[1.1, 1.34, 36]} />
           <meshBasicMaterial ref={signalWaveMat} color={signalColor} transparent opacity={0.35} depthWrite={false} toneMapped={false} />
         </mesh>
@@ -755,57 +765,64 @@ function Marker({
         {/* Surface ground reticle cardinal crosshairs */}
         <group quaternion={ringQuat}>
           {[0, Math.PI / 2, Math.PI, (3 * Math.PI) / 2].map((angle, i) => (
-            <mesh key={i} rotation={[0, 0, angle]} position={[0, 1.38, 0]}>
+            <mesh key={i} rotation={[0, 0, angle]} position={[0, 1.38, 0]} raycast={() => null}>
               <boxGeometry args={[0.07, 0.26, 0.02]} />
-              <meshBasicMaterial color={signalColor} transparent opacity={selected ? 0.9 : hot ? 0.7 : 0.48} depthWrite={false} toneMapped={false} />
+              <meshBasicMaterial color={signalColor} transparent opacity={selected ? 0.9 : isHovered ? 0.7 : 0.48} depthWrite={false} toneMapped={false} />
             </mesh>
           ))}
         </group>
 
         {/* Vertical beacon anchor pillar grounding the marker to the surface */}
         <group quaternion={beamQuat}>
-          <mesh position={[0, hot ? 1.6 : 1.15, 0]}>
-            <cylinderGeometry args={[0.025, 0.065, hot ? 3.2 : 2.3, 8, 1, true]} />
+          <mesh position={[0, isHovered ? 1.6 : 1.15, 0]} raycast={() => null}>
+            <cylinderGeometry args={[0.025, 0.065, isHovered ? 3.2 : 2.3, 8, 1, true]} />
             <meshBasicMaterial ref={restingBeamMat} color={signalColor} transparent opacity={0.5} depthWrite={false} toneMapped={false} side={THREE.DoubleSide} />
           </mesh>
           {/* Luminous beacon tip star orb with brilliant white core */}
-          <mesh position={[0, hot ? 3.25 : 2.35, 0]}>
+          <mesh position={[0, isHovered ? 3.25 : 2.35, 0]} raycast={() => null}>
             <sphereGeometry args={[0.16, 12, 12]} />
             <meshBasicMaterial color="#ffffff" toneMapped={false} />
           </mesh>
-          <mesh position={[0, hot ? 3.25 : 2.35, 0]}>
+          <mesh position={[0, isHovered ? 3.25 : 2.35, 0]} raycast={() => null}>
             <sphereGeometry args={[0.28, 12, 12]} />
             <meshBasicMaterial color={signalColor} transparent opacity={0.85} depthWrite={false} toneMapped={false} />
           </mesh>
+
+          {/* Responsive ergonomic hit cylinder covering base core and vertical beacon needle */}
+          <mesh
+            position={[0, 1.5, 0]}
+            onPointerDown={(event) => {
+              event.stopPropagation();
+              skipEmpty.current = true;
+            }}
+            onClick={(event) => {
+              event.stopPropagation();
+              skipEmpty.current = true;
+              onSelect(object.id);
+            }}
+            onPointerOver={(event) => {
+              event.stopPropagation();
+              document.body.style.cursor = "pointer";
+              onHover?.(true);
+            }}
+            onPointerOut={() => {
+              document.body.style.cursor = "";
+              onHover?.(false);
+            }}
+          >
+            <cylinderGeometry args={[1.2, 1.2, 3.2, 8]} />
+            <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+          </mesh>
         </group>
 
-        {/* Interactive base core sphere */}
-        <mesh
-          onPointerDown={(event) => {
-            event.stopPropagation();
-            skipEmpty.current = true;
-          }}
-          onClick={(event) => {
-            event.stopPropagation();
-            skipEmpty.current = true;
-            onSelect(object.id);
-          }}
-          onPointerOver={(event) => {
-            event.stopPropagation();
-            document.body.style.cursor = "pointer";
-            setHot(true);
-          }}
-          onPointerOut={() => {
-            document.body.style.cursor = "";
-            setHot(false);
-          }}
-        >
+        {/* Visual base core sphere */}
+        <mesh raycast={() => null}>
           <sphereGeometry args={[1, 16, 16]} />
           <meshStandardMaterial color={signalColor} emissive={signalColor} emissiveIntensity={1.8} toneMapped={false} />
         </mesh>
 
         {/* Inner dark contrast core */}
-        <mesh scale={0.58}>
+        <mesh scale={0.58} raycast={() => null}>
           <sphereGeometry args={[1, 14, 14]} />
           <meshBasicMaterial color="#080e1c" toneMapped={false} />
         </mesh>
@@ -818,11 +835,11 @@ function Marker({
         {/* High-altitude telemetry beacon beam on selection */}
         {(selected || previewed) && (
           <group quaternion={beamQuat}>
-            <mesh position={[0, 2.8, 0]}>
+            <mesh position={[0, 2.8, 0]} raycast={() => null}>
               <cylinderGeometry args={[0.16, 0.6, 5.6, 16, 1, true]} />
               <meshBasicMaterial ref={beamMat} color={signalColor} transparent opacity={0.3} depthWrite={false} toneMapped={false} side={THREE.DoubleSide} />
             </mesh>
-            <mesh position={[0, 5.65, 0]}>
+            <mesh position={[0, 5.65, 0]} raycast={() => null}>
               <sphereGeometry args={[0.24, 12, 12]} />
               <meshBasicMaterial color={signalColor} transparent opacity={0.9} depthWrite={false} toneMapped={false} />
             </mesh>
@@ -830,14 +847,14 @@ function Marker({
         )}
 
         {/* Burst ripple mesh on reveal */}
-        <mesh ref={ripple} visible={false} quaternion={ringQuat}>
+        <mesh ref={ripple} visible={false} quaternion={ringQuat} raycast={() => null}>
           <ringGeometry args={[1.35, 1.7, 40]} />
           <meshBasicMaterial ref={rippleMat} color={signalColor} transparent opacity={0} depthWrite={false} toneMapped={false} />
         </mesh>
 
         {/* Selected outer orbit lock ring */}
         {selected && (
-          <mesh quaternion={ringQuat}>
+          <mesh quaternion={ringQuat} raycast={() => null}>
             <ringGeometry args={[1.58, 1.9, 48]} />
             <meshBasicMaterial color={signalColor} transparent opacity={0.92} depthWrite={false} toneMapped={false} />
           </mesh>
@@ -845,9 +862,15 @@ function Marker({
       </group>
 
       {/* Archival Hover Specimen Card */}
-      {labelReady && hot && !selected && (
-        <Html position={[0, 0.05, 0]} center zIndexRange={[12, 0]} style={{ pointerEvents: "none" }}>
-          <div className="w-max max-w-52 rounded-2xl border border-white/20 bg-[#070d1c]/92 p-2.5 text-left shadow-2xl backdrop-blur-xl ring-1 ring-black/40">
+      {labelReady && isHovered && !selected && (
+        <Html
+          position={[0, 0.05, 0]}
+          center
+          zIndexRange={[12, 0]}
+          wrapperClass="pointer-events-none select-none"
+          style={{ pointerEvents: "none" }}
+        >
+          <div className="pointer-events-none select-none w-max max-w-52 rounded-2xl border border-white/20 bg-[#070d1c]/92 p-2.5 text-left shadow-2xl backdrop-blur-xl ring-1 ring-black/40">
             <div className="flex items-center gap-1.5 mb-1">
               <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: signalColor, boxShadow: `0 0 8px ${signalColor}` }} />
               <span className="font-mono text-[9px] tracking-[0.16em] uppercase text-[#f2a64a]">{caption.type || object.type}</span>
@@ -869,8 +892,14 @@ function Marker({
 
       {/* Selected Specimen Card */}
       {labelReady && selected && (
-        <Html position={[0, 0.05, 0]} center zIndexRange={[12, 0]} style={{ pointerEvents: "none" }}>
-          <div className="w-max max-w-56 rounded-2xl border border-[#6aa4ff]/50 bg-[#070d1c]/95 p-3 text-left shadow-2xl backdrop-blur-xl ring-1 ring-[#6aa4ff]/30">
+        <Html
+          position={[0, 0.05, 0]}
+          center
+          zIndexRange={[12, 0]}
+          wrapperClass="pointer-events-none select-none"
+          style={{ pointerEvents: "none" }}
+        >
+          <div className="pointer-events-none select-none w-max max-w-56 rounded-2xl border border-[#6aa4ff]/50 bg-[#070d1c]/95 p-3 text-left shadow-2xl backdrop-blur-xl ring-1 ring-[#6aa4ff]/30">
             <div className="flex items-center gap-1.5 mb-1">
               <span className="h-2 w-2 rounded-full" style={{ backgroundColor: signalColor, boxShadow: `0 0 10px ${signalColor}` }} />
               <span className="font-mono text-[9px] tracking-[0.18em] uppercase text-[#6aa4ff]">TARGET LOCKED</span>
@@ -964,7 +993,7 @@ function ClusterTether({
   if (length < 0.002) return null;
 
   return (
-    <mesh position={mid} quaternion={quaternion}>
+    <mesh position={mid} quaternion={quaternion} raycast={() => null}>
       <cylinderGeometry args={[0.0003, 0.0003, length, 6, 1, true]} />
       <meshBasicMaterial
         color={color}
@@ -1031,6 +1060,10 @@ function ConstellationCluster({
   pulses,
   labelFor,
   captionFor,
+  isHovered = false,
+  onHover,
+  hoveredObjectId,
+  onHoverObject,
   onSelect,
   onOpen,
   onClose,
@@ -1049,6 +1082,10 @@ function ConstellationCluster({
   pulses: Record<string, number>;
   labelFor: (object: Artifact) => string;
   captionFor: (object: Artifact) => { type: string; place: string; year: string };
+  isHovered?: boolean;
+  onHover?: (hovered: boolean) => void;
+  hoveredObjectId?: string | null;
+  onHoverObject?: (id: string | null) => void;
   onSelect: (id: string) => void;
   onOpen: () => void;
   onClose: () => void;
@@ -1056,7 +1093,6 @@ function ConstellationCluster({
   const emptyCaption = { type: "", place: "", year: "" };
   const anchorRef = useRef<THREE.Group>(null);
   const scratch = useRef(new THREE.Vector3());
-  const [hot, setHot] = useState(false);
   const [labelReady, setLabelReady] = useState(false);
   useEffect(() => setLabelReady(true), []);
 
@@ -1107,70 +1143,83 @@ function ConstellationCluster({
         {/* Pure 3D multi-artifact beacon marker */}
         <group ref={anchorRef}>
           {/* Ground primary radar reticle */}
-          <mesh quaternion={anchorRingQuat}>
+          <mesh quaternion={anchorRingQuat} raycast={() => null}>
             <ringGeometry args={[1.05, 1.3, 36]} />
-            <meshBasicMaterial color="#6aa4ff" transparent opacity={hot ? 0.9 : 0.65} depthWrite={false} toneMapped={false} />
+            <meshBasicMaterial color="#6aa4ff" transparent opacity={isHovered ? 0.9 : 0.65} depthWrite={false} toneMapped={false} />
           </mesh>
 
           {/* Secondary concentric multi-hardware beacon ring */}
-          <mesh quaternion={anchorRingQuat}>
+          <mesh quaternion={anchorRingQuat} raycast={() => null}>
             <ringGeometry args={[1.5, 1.74, 36]} />
-            <meshBasicMaterial color="#6aa4ff" transparent opacity={hot ? 0.55 : 0.32} depthWrite={false} toneMapped={false} />
+            <meshBasicMaterial color="#6aa4ff" transparent opacity={isHovered ? 0.55 : 0.32} depthWrite={false} toneMapped={false} />
           </mesh>
 
           {/* Vertical beacon anchor pillar */}
           <group quaternion={beamQuat}>
-            <mesh position={[0, hot ? 1.6 : 1.15, 0]}>
-              <cylinderGeometry args={[0.025, 0.065, hot ? 3.2 : 2.3, 8, 1, true]} />
+            <mesh position={[0, isHovered ? 1.6 : 1.15, 0]} raycast={() => null}>
+              <cylinderGeometry args={[0.025, 0.065, isHovered ? 3.2 : 2.3, 8, 1, true]} />
               <meshBasicMaterial color="#6aa4ff" transparent opacity={0.55} depthWrite={false} toneMapped={false} side={THREE.DoubleSide} />
             </mesh>
             {/* High-visibility beacon tip star orb with brilliant white core */}
-            <mesh position={[0, hot ? 3.25 : 2.35, 0]}>
+            <mesh position={[0, isHovered ? 3.25 : 2.35, 0]} raycast={() => null}>
               <sphereGeometry args={[0.16, 12, 12]} />
               <meshBasicMaterial color="#ffffff" toneMapped={false} />
             </mesh>
-            <mesh position={[0, hot ? 3.25 : 2.35, 0]}>
+            <mesh position={[0, isHovered ? 3.25 : 2.35, 0]} raycast={() => null}>
               <sphereGeometry args={[0.28, 12, 12]} />
               <meshBasicMaterial color="#6aa4ff" transparent opacity={0.85} depthWrite={false} toneMapped={false} />
             </mesh>
+
+            {/* Responsive ergonomic hit cylinder covering base core and vertical beacon needle */}
+            <mesh
+              position={[0, 1.5, 0]}
+              onPointerDown={(event) => {
+                event.stopPropagation();
+                skipEmpty.current = true;
+              }}
+              onClick={(event) => {
+                event.stopPropagation();
+                skipEmpty.current = true;
+                onOpen();
+              }}
+              onPointerOver={(event) => {
+                event.stopPropagation();
+                document.body.style.cursor = "pointer";
+                onHover?.(true);
+              }}
+              onPointerOut={() => {
+                document.body.style.cursor = "";
+                onHover?.(false);
+              }}
+            >
+              <cylinderGeometry args={[1.2, 1.2, 3.2, 8]} />
+              <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+            </mesh>
           </group>
 
-          {/* Interactive base core sphere */}
-          <mesh
-            onPointerDown={(event) => {
-              event.stopPropagation();
-              skipEmpty.current = true;
-            }}
-            onClick={(event) => {
-              event.stopPropagation();
-              skipEmpty.current = true;
-              onOpen();
-            }}
-            onPointerOver={(event) => {
-              event.stopPropagation();
-              document.body.style.cursor = "pointer";
-              setHot(true);
-            }}
-            onPointerOut={() => {
-              document.body.style.cursor = "";
-              setHot(false);
-            }}
-          >
+          {/* Visual base core sphere */}
+          <mesh raycast={() => null}>
             <sphereGeometry args={[1, 16, 16]} />
             <meshStandardMaterial color="#6aa4ff" emissive="#6aa4ff" emissiveIntensity={1.8} toneMapped={false} />
           </mesh>
 
           {/* Inner dark contrast core */}
-          <mesh scale={0.58}>
+          <mesh scale={0.58} raycast={() => null}>
             <sphereGeometry args={[1, 14, 14]} />
             <meshBasicMaterial color="#080e1c" toneMapped={false} />
           </mesh>
         </group>
 
         {/* Hover-only Archival Specimen Card (zero permanent text on the planet) */}
-        {labelReady && hot && (
-          <Html position={[0, 0.05, 0]} center zIndexRange={[14, 0]} style={{ pointerEvents: "none" }}>
-            <div className="w-max max-w-56 rounded-2xl border border-[#6aa4ff]/40 bg-[#070d1c]/95 p-3 text-left shadow-2xl backdrop-blur-xl ring-1 ring-black/40">
+        {labelReady && isHovered && (
+          <Html
+            position={[0, 0.05, 0]}
+            center
+            zIndexRange={[14, 0]}
+            wrapperClass="pointer-events-none select-none"
+            style={{ pointerEvents: "none" }}
+          >
+            <div className="pointer-events-none select-none w-max max-w-56 rounded-2xl border border-[#6aa4ff]/40 bg-[#070d1c]/95 p-3 text-left shadow-2xl backdrop-blur-xl ring-1 ring-black/40">
               <div className="flex items-center gap-1.5 mb-1">
                 <span className="h-1.5 w-1.5 rounded-full bg-[#6aa4ff] shadow-[0_0_8px_#6aa4ff]" />
                 <span className="font-mono text-[9px] tracking-[0.16em] uppercase text-[#6aa4ff]">
@@ -1195,22 +1244,22 @@ function ConstellationCluster({
       {/* Central landing origin hub */}
       <group position={cluster.position}>
         <group ref={anchorRef}>
-          <mesh quaternion={anchorRingQuat}>
+          <mesh quaternion={anchorRingQuat} raycast={() => null}>
             <ringGeometry args={[1.05, 1.25, 32]} />
             <meshBasicMaterial color="#6aa4ff" transparent opacity={0.7} depthWrite={false} toneMapped={false} />
           </mesh>
-          <mesh quaternion={anchorRingQuat}>
+          <mesh quaternion={anchorRingQuat} raycast={() => null}>
             <ringGeometry args={[1.5, 1.62, 32]} />
             <meshBasicMaterial color="#6aa4ff" transparent opacity={0.3} depthWrite={false} toneMapped={false} />
           </mesh>
-          <mesh position={[0, 0, 0]}>
+          <mesh position={[0, 0, 0]} raycast={() => null}>
             <sphereGeometry args={[0.5, 12, 12]} />
             <meshBasicMaterial color="#6aa4ff" toneMapped={false} />
           </mesh>
         </group>
         {/* Subtle center hub collapse button only on hover */}
         {labelReady && (
-          <Html position={[0, 0.02, 0]} center zIndexRange={[22, 0]} style={{ pointerEvents: "auto" }}>
+          <Html position={[0, 0.02, 0]} center zIndexRange={[22, 0]} wrapperClass="pointer-events-auto" style={{ pointerEvents: "auto" }}>
             <div onPointerDown={(event) => event.stopPropagation()}>
               <button
                 type="button"
@@ -1260,6 +1309,8 @@ function ConstellationCluster({
             quiet={quiet}
             skipEmpty={skipEmpty}
             customPosition={position}
+            isHovered={hoveredObjectId === object.id}
+            onHover={(hot) => onHoverObject?.(hot ? object.id : null)}
             onSelect={onSelect}
           />
         );
@@ -1286,6 +1337,11 @@ function MarkerLayer({
   missionIds,
   onClusterFocus,
   onSelect,
+  hoveredId,
+  onHoverId,
+  openClusterId,
+  onOpenCluster,
+  onCloseCluster,
 }: {
   objects: Artifact[];
   selectedId: string | null;
@@ -1305,10 +1361,14 @@ function MarkerLayer({
   missionIds: readonly string[];
   onClusterFocus?: (position: THREE.Vector3) => void;
   onSelect: (id: string) => void;
+  hoveredId: string | null;
+  onHoverId: (id: string | null) => void;
+  openClusterId: string | null;
+  onOpenCluster: (id: string) => void;
+  onCloseCluster: () => void;
 }) {
   const { camera } = useThree();
   const [clusters, setClusters] = useState<Cluster[]>([]);
-  const [openId, setOpenId] = useState<string | null>(null);
   const [shown, setShown] = useState<string[]>(() => {
     if (!discovery) return objects.map((object) => object.id);
     const ids = new Set(discoveredIds);
@@ -1351,10 +1411,12 @@ function MarkerLayer({
     if (selectedId) {
       const match = clusters.find((cluster) => cluster.objectIds.includes(selectedId));
       if (match) {
-        setOpenId(match.id);
+        onOpenCluster(match.id);
       }
+    } else {
+      onCloseCluster();
     }
-  }, [selectedId, clusters]);
+  }, [selectedId, clusters, onOpenCluster, onCloseCluster]);
 
   useFrame((state) => {
     if (state.clock.elapsedTime - last.current < 0.22) return;
@@ -1417,7 +1479,9 @@ function MarkerLayer({
       signature.current = clusterKey;
       afterFrame(() => {
         setClusters(next);
-        setOpenId((current) => (next.some((cluster) => cluster.id === current) ? current : null));
+        if (openClusterId && !next.some((cluster) => cluster.id === openClusterId)) {
+          onCloseCluster();
+        }
       });
     }
   });
@@ -1450,6 +1514,8 @@ function MarkerLayer({
           reducedMotion={reducedMotion}
           quiet={missionIds.length > 0 && !missionIds.includes(object.id)}
           skipEmpty={skipEmpty}
+          isHovered={hoveredId === object.id}
+          onHover={(hot) => onHoverId(hot ? object.id : null)}
           onSelect={onSelect}
         />
       ))}
@@ -1459,7 +1525,7 @@ function MarkerLayer({
           cluster={cluster}
           byId={byId}
           siteName={getClusterSiteName(cluster.objectIds, byId)}
-          isOpen={openId === cluster.id || (selectedId !== null && cluster.objectIds.includes(selectedId))}
+          isOpen={openClusterId === cluster.id || (selectedId !== null && cluster.objectIds.includes(selectedId))}
           selectedId={selectedId}
           previewedId={previewedId}
           emphasisNonce={emphasisNonce}
@@ -1470,12 +1536,16 @@ function MarkerLayer({
           pulses={pulses}
           labelFor={labelFor}
           captionFor={captionFor}
+          isHovered={hoveredId === cluster.id}
+          onHover={(hot) => onHoverId(hot ? cluster.id : null)}
+          hoveredObjectId={hoveredId}
+          onHoverObject={(id) => onHoverId(id)}
           onSelect={onSelect}
           onOpen={() => {
-            setOpenId(cluster.id);
+            onOpenCluster(cluster.id);
             onClusterFocus?.(cluster.position);
           }}
-          onClose={() => setOpenId(null)}
+          onClose={onCloseCluster}
         />
       ))}
     </>
@@ -1722,7 +1792,9 @@ function MissionLinks({ ids, objects, reducedMotion }: { ids: readonly string[];
     if (curves.length === 0) return null;
     const geometry = new THREE.BufferGeometry();
     const material = new THREE.MeshBasicMaterial({ color: "#f2a64a", transparent: true, opacity: 0.9 });
-    return new THREE.Mesh(geometry, material);
+    const instance = new THREE.Mesh(geometry, material);
+    instance.raycast = () => null;
+    return instance;
   }, [curves]);
   const drawn = useRef(0);
 
@@ -1790,7 +1862,9 @@ function RoverTrail({ selectedId, reducedMotion }: { selectedId: string | null; 
   }, [route]);
   const line = useMemo(() => {
     if (!geometry) return null;
-    return new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: "#8fd0ea", transparent: true, opacity: 0.75 }));
+    const instance = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: "#8fd0ea", transparent: true, opacity: 0.75 }));
+    instance.raycast = () => null;
+    return instance;
   }, [geometry]);
   const drawn = useRef(0);
 
@@ -1824,6 +1898,51 @@ function SceneContents(props: SceneProps) {
   const spinAngle = useRef(0);
   const spinGate = useRef(false);
   const [clusterFocus, setClusterFocus] = useState<{ position: THREE.Vector3; nonce: number } | null>(null);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [openClusterId, setOpenClusterId] = useState<string | null>(null);
+  const gl = useThree((state) => state.gl);
+
+  const clearHover = useCallback(() => {
+    setHoveredId(null);
+    document.body.style.cursor = "";
+  }, []);
+
+  const handleHoverId = useCallback((id: string | null) => {
+    setHoveredId(id);
+    if (!id) {
+      document.body.style.cursor = "";
+    }
+  }, []);
+
+  const handleOpenCluster = useCallback((id: string) => {
+    setOpenClusterId(id);
+    clearHover();
+  }, [clearHover]);
+
+  const handleCloseCluster = useCallback(() => {
+    setOpenClusterId(null);
+    clearHover();
+  }, [clearHover]);
+
+  // Global dismissal when pointer leaves the canvas or pointer is pressed anywhere
+  useEffect(() => {
+    const onCanvasLeave = () => clearHover();
+    const onCanvasDown = () => clearHover();
+    gl.domElement.addEventListener("pointerleave", onCanvasLeave);
+    gl.domElement.addEventListener("pointerdown", onCanvasDown);
+    return () => {
+      gl.domElement.removeEventListener("pointerleave", onCanvasLeave);
+      gl.domElement.removeEventListener("pointerdown", onCanvasDown);
+    };
+  }, [gl, clearHover]);
+
+  // Clean hover dismissal and cluster state whenever selection changes or is cleared
+  useEffect(() => {
+    clearHover();
+    setClusterFocus(null);
+    setOpenClusterId(null);
+  }, [props.selectedId, clearHover]);
+
   const planetSeen = useRef(props.planet);
   if (planetSeen.current !== props.planet) {
     planetSeen.current = props.planet;
@@ -1836,9 +1955,9 @@ function SceneContents(props: SceneProps) {
       <Lights planet={props.planet} />
       <CameraFill enabled={selected !== null} />
       <SpinningBody angle={spinAngle} gate={spinGate}>
-        <TextureBoundary key={`${props.planet}-${props.textureAttempt ?? 0}`} onFail={props.onTextureFail} fallback={<FallbackSphere planet={props.planet} />}>
-          <Suspense fallback={<FallbackSphere planet={props.planet} />}>
-            <TexturedPlanet planet={props.planet} />
+        <TextureBoundary key={`${props.planet}-${props.textureAttempt ?? 0}`} onFail={props.onTextureFail} fallback={<FallbackSphere planet={props.planet} onSurfacePointerMove={clearHover} />}>
+          <Suspense fallback={<FallbackSphere planet={props.planet} onSurfacePointerMove={clearHover} />}>
+            <TexturedPlanet planet={props.planet} onSurfacePointerMove={clearHover} />
           </Suspense>
         </TextureBoundary>
         {props.planet === "mars" && <MarsAir />}
@@ -1858,6 +1977,7 @@ function SceneContents(props: SceneProps) {
           skipEmpty={skipEmpty}
           spinAngle={spinAngle}
           clusterHint={props.clusterHint}
+          clickHint={props.clickHint}
           labelFor={props.labelFor}
           captionFor={props.captionFor ?? (() => ({ type: "", place: "", year: "" }))}
           discovery={props.discovery ?? false}
@@ -1867,6 +1987,11 @@ function SceneContents(props: SceneProps) {
           missionIds={props.missionIds ?? []}
           onClusterFocus={(position) => setClusterFocus({ position, nonce: performance.now() })}
           onSelect={props.onSelect}
+          hoveredId={hoveredId}
+          onHoverId={handleHoverId}
+          openClusterId={openClusterId}
+          onOpenCluster={handleOpenCluster}
+          onCloseCluster={handleCloseCluster}
         />
         <MissionLinks ids={props.missionIds ?? []} objects={props.objects} reducedMotion={props.reducedMotion} />
         <RoverTrail selectedId={props.selectedId} reducedMotion={props.reducedMotion} />
@@ -1886,9 +2011,12 @@ function SceneContents(props: SceneProps) {
         spinAngle={spinAngle}
         spinGate={spinGate}
         onEmptyClick={() => {
+          clearHover();
+          setOpenClusterId(null);
           setClusterFocus(null);
           props.onEmptyClick?.();
         }}
+        onInteract={clearHover}
         onFlight={props.onFlight}
         siteFrame={props.siteFrame ?? { right: 0, up: 0 }}
       />
@@ -1917,6 +2045,9 @@ export function PlanetViewport(props: SceneProps) {
           onCreated={({ gl }) => {
             gl.toneMapping = THREE.ACESFilmicToneMapping;
             gl.toneMappingExposure = 1.05;
+          }}
+          onPointerMissed={() => {
+            document.body.style.cursor = "";
           }}
         >
           <SceneContents

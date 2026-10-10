@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { LuChevronLeft, LuChevronRight, LuX } from "react-icons/lu";
+import { LuBox, LuChevronLeft, LuChevronRight, LuX } from "react-icons/lu";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useI18n } from "../../features/localization/LanguageContext";
 import { formatCoordinate, yearOf } from "../../lib/coordinates/latLon";
@@ -8,6 +8,16 @@ import { formatDisplayDate, recordedSpanDays } from "../../lib/presentation";
 import { eventsForMission, eventsForObject, lastContactFor } from "../../lib/story";
 import type { Artifact, CatalogImage, Mission, Source, TimelineEvent } from "../../types/catalog";
 import type { Lang } from "../../features/localization/strings";
+
+const statusColor: Record<string, string> = {
+  active: "#6aa4ff",
+  inactive: "#93a6c9",
+  mission_complete: "#f2a64a",
+  communication_lost: "#f2a64a",
+  destroyed: "#d77979",
+  impacted: "#d77979",
+  unknown: "#93a6c9",
+};
 
 type Props = {
   object: Artifact;
@@ -29,6 +39,7 @@ type Props = {
   onEvent: (event: TimelineEvent) => void;
   onHear: () => void;
   narrationNote: string | null;
+  onOpen3D?: () => void;
 };
 
 export function StoryPanel({
@@ -51,6 +62,7 @@ export function StoryPanel({
   onEvent,
   onHear,
   narrationNote,
+  onOpen3D,
 }: Props) {
   const { t, lang } = useI18n();
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -92,14 +104,14 @@ export function StoryPanel({
         aria-labelledby="story-title"
         className={
           mobile
-            ? `pointer-events-auto w-full overflow-auto rounded-t-3xl border border-white/15 bg-[#070d1c]/88 shadow-2xl backdrop-blur-xl ${sheet === "peek" ? "max-h-[8.5rem]" : "max-h-[min(78dvh,680px)]"}`
-            : "pointer-events-auto max-h-[min(68dvh,680px)] w-[min(400px,calc(100%-2rem))] overflow-auto rounded-3xl border border-white/15 bg-[#070d1c]/55 shadow-2xl backdrop-blur-xl"
+            ? `pointer-events-auto w-full overflow-auto rounded-t-3xl border border-white/15 bg-[#070d1c]/95 shadow-2xl backdrop-blur-2xl ${sheet === "peek" ? "max-h-[8.5rem]" : "max-h-[min(78dvh,680px)]"}`
+            : "pointer-events-auto max-h-[min(68dvh,680px)] w-[min(400px,calc(100%-2rem))] overflow-auto rounded-3xl border border-white/15 bg-[#070d1c]/95 shadow-2xl backdrop-blur-2xl"
         }
       >
         {mobile && (
           <button
             type="button"
-            className="mx-auto mt-2 block h-11 w-16 rounded-full text-[11px] tracking-[0.14em] text-[#93a6c9] uppercase"
+            className="mx-auto mt-2 block h-11 w-16 rounded-full text-xs text-[#93a6c9] uppercase"
             aria-expanded={sheet === "open"}
             aria-label={sheet === "open" ? t.collapseStory : t.expandStory}
             onClick={() => setSheet((current) => (current === "open" ? "peek" : "open"))}
@@ -107,67 +119,125 @@ export function StoryPanel({
             {sheet === "open" ? t.collapseStory : t.expandStory}
           </button>
         )}
-        <div className="sticky top-0 z-10 flex items-start gap-1.5 border-b border-white/10 bg-[#070d1c]/55 px-3 py-2.5 backdrop-blur-md sm:gap-2 sm:px-4 sm:py-3">
-          <button type="button" onClick={onPrevious ?? undefined} disabled={!onPrevious} aria-label={t.previousObject} className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-white/15 p-2 disabled:opacity-30">
-            <LuChevronLeft />
+        <header className="sticky top-0 z-20 flex items-start gap-2 border-b border-white/15 bg-[#080e1c] bg-gradient-to-b from-[#0e172e] via-[#091224] to-[#080e1c] px-3.5 py-3 shadow-lg shadow-black/60 sm:gap-2.5 sm:px-4 sm:py-3.5">
+          <button
+            type="button"
+            onClick={onPrevious ?? undefined}
+            disabled={!onPrevious}
+            aria-label={t.previousObject}
+            title={t.previousObject}
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/15 bg-white/5 text-[#f4f7ff] shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] transition hover:border-[#6aa4ff]/60 hover:bg-[#6aa4ff]/15 hover:text-[#6aa4ff] active:scale-95 disabled:opacity-20 disabled:hover:border-white/15 disabled:hover:bg-white/5 disabled:hover:text-[#f4f7ff]"
+          >
+            <LuChevronLeft className="h-5 w-5" />
           </button>
           <div className="min-w-0 flex-1">
-            <p className="text-[11px] tracking-[0.18em] text-[#f2a64a] uppercase">{t.typeLabels[object.type]}</p>
-            <h2 id="story-title" className="font-display text-2xl leading-tight sm:text-3xl">
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#f2a64a] shadow-[0_0_8px_#f2a64a]" />
+              <p className="font-mono text-[10px] sm:text-[11px] tracking-[0.2em] text-[#f2a64a] uppercase">
+                {t.typeLabels[object.type]}
+              </p>
+            </div>
+            <h2 id="story-title" className="font-display text-2xl font-semibold leading-tight text-[#f4f7ff] sm:text-3xl">
               {object.name[lang]}
             </h2>
-            <p className="mt-1 text-xs text-[#93a6c9]">
-              {place}
-              {arrivalYear ? ` · ${arrivalYear.toLocaleString(lang === "bn" ? "bn-BD" : "en-GB", { useGrouping: false })}` : ""}
-            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-1.5 sm:gap-2">
+              {place && (
+                <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 text-xs text-[#c5d2ea]">
+                  {place}
+                </span>
+              )}
+              {arrivalYear && (
+                <span className="rounded-full border border-[#6aa4ff]/30 bg-[#6aa4ff]/10 px-2.5 py-0.5 font-mono text-xs text-[#6aa4ff]">
+                  {arrivalYear.toLocaleString(lang === "bn" ? "bn-BD" : "en-GB", { useGrouping: false })}
+                </span>
+              )}
+              {onOpen3D && (
+                <button
+                  type="button"
+                  onClick={onOpen3D}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-[#6aa4ff]/40 bg-[#6aa4ff]/15 px-2.5 py-0.5 text-[11px] font-mono font-medium tracking-wider text-[#6aa4ff] shadow-sm transition hover:border-[#6aa4ff] hover:bg-[#6aa4ff]/25 active:scale-95"
+                  title={t.modelGallery}
+                >
+                  <LuBox className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>3D MODEL</span>
+                </button>
+              )}
+            </div>
           </div>
-          <button type="button" onClick={onNext ?? undefined} disabled={!onNext} aria-label={t.nextObject} className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-white/15 p-2 disabled:opacity-30">
-            <LuChevronRight />
+          <button
+            type="button"
+            onClick={onNext ?? undefined}
+            disabled={!onNext}
+            aria-label={t.nextObject}
+            title={t.nextObject}
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/15 bg-white/5 text-[#f4f7ff] shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] transition hover:border-[#6aa4ff]/60 hover:bg-[#6aa4ff]/15 hover:text-[#6aa4ff] active:scale-95 disabled:opacity-20 disabled:hover:border-white/15 disabled:hover:bg-white/5 disabled:hover:text-[#f4f7ff]"
+          >
+            <LuChevronRight className="h-5 w-5" />
           </button>
-          <button ref={closeRef} type="button" onClick={onClose} aria-label={t.clearSelection} className="rounded-full border border-white/15 p-2">
-            <LuX />
+          <button
+            ref={closeRef}
+            type="button"
+            onClick={onClose}
+            aria-label={t.clearSelection}
+            title={t.clearSelection}
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/15 bg-white/5 text-[#f4f7ff] shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] transition hover:border-[#f07167]/60 hover:bg-[#f07167]/15 hover:text-[#f07167] active:scale-95"
+          >
+            <LuX className="h-5 w-5" />
           </button>
-        </div>
+        </header>
         <div className={`space-y-5 px-4 py-4 text-sm leading-6 sm:px-5 ${mobile && sheet === "peek" ? "hidden" : ""}`}>
           <p className="text-base text-[#f4f7ff]">{object.summary[lang]}</p>
           <button type="button" onClick={onHear} className="min-h-11 rounded-full border border-[#f2a64a]/50 px-4 text-xs tracking-[0.12em] text-[#f2a64a] uppercase">
             {t.hearSite}
           </button>
-          {narrationNote && <p className="text-xs leading-5 text-[#93a6c9]">{narrationNote}</p>}
-          <section className="rounded-2xl border border-white/10 bg-black/25 px-3 py-3">
-            <h3 className="text-[11px] tracking-[0.16em] text-[#f2a64a] uppercase">{t.status}</h3>
-            <p className="mt-1 text-sm text-[#f4f7ff]">
-              <span aria-hidden="true">● </span>
-              {t.statusLabels[object.status]}
-            </p>
-            {mission && <AtAGlance mission={mission} active={object.status === "active"} lang={lang} />}
-            <p className="mt-2 text-xs text-[#93a6c9]">
-              {t.lastContact}: {contact ? `${formatDisplayDate(contact.date, lang)}. ${contact.description[lang]}` : t.unknownDate}
-            </p>
-          </section>
+          {narrationNote && <p className="text-xs text-[#93a6c9]">{narrationNote}</p>}
+          <div className="flex flex-wrap gap-4 text-xs">
+            <div>
+              <span className="text-[#93a6c9]">{t.status}: </span>
+              <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: statusColor[object.status] ?? "#93a6c9" }} /> {t.statusLabels[object.status]}
+            </div>
+            {contact && (
+              <div>
+                <span className="text-[#93a6c9]">{t.lastContact}: </span>
+                <span>{formatDisplayDate(contact.date, lang)}</span>
+              </div>
+            )}
+          </div>
+          {contact?.description[lang] && <p className="text-xs text-[#93a6c9]">{contact.description[lang]}</p>}
+          {mission && <AtAGlance mission={mission} active={object.status === "active"} lang={lang} />}
           <Disclosure title={t.theStory} open>
             <p>{story.whatIsIt}</p>
           </Disclosure>
           <Disclosure title={t.whatHappened} open>
             <p>{story.whatHappened}</p>
           </Disclosure>
-          <section>
-            <div className="flex gap-2" role="group" aria-label={`${t.thenEra} / ${t.nowEra}`}>
-              <button type="button" aria-pressed={era === "then"} onClick={() => setEra("then")} className={`rounded-full border px-3 py-1 text-xs tracking-[0.14em] uppercase ${era === "then" ? "border-[#f2a64a] text-[#f2a64a]" : "border-white/15 text-[#93a6c9]"}`}>
+          <div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                aria-pressed={era === "then"}
+                onClick={() => setEra("then")}
+                className={`rounded-full border px-3 py-1 text-xs ${era === "then" ? "border-[#f2a64a] text-[#f2a64a]" : "border-white/15 text-[#93a6c9]"}`}
+              >
                 {t.thenEra}
               </button>
-              <button type="button" aria-pressed={era === "now"} onClick={() => setEra("now")} className={`rounded-full border px-3 py-1 text-xs tracking-[0.14em] uppercase ${era === "now" ? "border-[#6aa4ff] text-[#6aa4ff]" : "border-white/15 text-[#93a6c9]"}`}>
+              <button
+                type="button"
+                aria-pressed={era === "now"}
+                onClick={() => setEra("now")}
+                className={`rounded-full border px-3 py-1 text-xs ${era === "now" ? "border-[#6aa4ff] text-[#6aa4ff]" : "border-white/15 text-[#93a6c9]"}`}
+              >
                 {t.nowEra}
               </button>
             </div>
             {era === "then" ? (
-              <div className="mt-3 space-y-3">
+              <div className="mt-2 space-y-2">
                 {object.images.length > 0 ? (
                   object.images.map((image) => (
                     <StoryImage key={image.id} image={image} lang={lang} label={t.photograph} source={sources.find((item) => item.id === image.sourceId)} />
                   ))
                 ) : (
-                  <p className="text-[#93a6c9]">{t.noMissionImage}</p>
+                  <p className="text-xs text-[#93a6c9]">{t.noMissionImage}</p>
                 )}
                 {mission && (
                   <p className="text-xs text-[#93a6c9]">
@@ -176,28 +246,28 @@ export function StoryPanel({
                 )}
               </div>
             ) : (
-              <div className="mt-3 space-y-2">
-                <p className="text-[#93a6c9]">{t.noCurrentImage}</p>
+              <div className="mt-2 space-y-2">
+                <p className="text-xs text-[#93a6c9]">{t.noCurrentImage}</p>
                 <p>
-                  <span className="text-[#93a6c9]">{t.knownState}. </span>
+                  <span className="text-[#93a6c9]">{t.knownState}: </span>
                   {t.statusLabels[object.status]}. {story.whyLeft}
                 </p>
               </div>
             )}
-          </section>
+          </div>
           <Disclosure title={t.whyLeft} open>
             <p>{story.whyLeft}</p>
           </Disclosure>
           {object.type === "rover" && !hasTraverse && <p className="text-xs text-[#93a6c9]">{t.noTraverse}</p>}
           {mission && (
-            <section>
+            <div>
               <h3 className="text-[11px] tracking-[0.16em] text-[#f2a64a] uppercase">{t.mission}</h3>
-              <p className="mt-1 text-[#f4f7ff]">{mission.name[lang]}</p>
+              <p className="font-semibold text-[#f4f7ff]">{mission.name[lang]}</p>
               <div className="mt-2 flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={missionOpen ? onLeaveMission : onExploreMission}
-                  className="rounded-full border border-white/15 px-3 py-1.5 text-xs"
+                  className="rounded-full border border-white/20 px-3 py-1 text-xs text-[#f4f7ff] hover:border-[#6aa4ff]"
                 >
                   {missionOpen ? t.leaveMission : t.exploreMission}
                 </button>
@@ -210,8 +280,7 @@ export function StoryPanel({
                       <button
                         type="button"
                         onClick={() => onNearby?.(item.id)}
-                        aria-current={item.id === object.id ? "true" : undefined}
-                        className={`block w-full rounded-xl border px-3 py-2 text-left text-sm ${item.id === object.id ? "border-[#6aa4ff] text-[#f4f7ff]" : "border-white/10 text-[#c5d2ea] hover:bg-white/10"}`}
+                        className={`block w-full rounded-xl border px-3 py-2 text-left text-sm ${item.id === object.id ? "border-[#6aa4ff] bg-[#6aa4ff]/10 text-[#f4f7ff]" : "border-white/10 text-[#c5d2ea] hover:bg-white/10"}`}
                       >
                         {item.name}
                       </button>
@@ -219,10 +288,10 @@ export function StoryPanel({
                   ))}
                 </ul>
               )}
-            </section>
+            </div>
           )}
           {record.length > 0 && (
-            <section>
+            <div>
               <h3 className="text-[11px] tracking-[0.16em] text-[#f2a64a] uppercase">{t.missionEvents}</h3>
               <ol className="mt-2 space-y-2 border-l border-white/15 pl-3">
                 {record.map((event) => (
@@ -243,7 +312,7 @@ export function StoryPanel({
                 ))}
               </ol>
               {activeEvent && <p className="mt-2 text-[#c5d2ea]">{activeEvent.description[lang]}</p>}
-            </section>
+            </div>
           )}
           <Disclosure title={t.whyItMatters}>
             <p>{object.significance[lang]}</p>

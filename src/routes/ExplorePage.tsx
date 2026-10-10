@@ -569,7 +569,7 @@ function Explorer({ planet }: { planet: PlanetId }) {
           selectedId={selected?.id ?? null}
           previewedId={timelinePreview?.objectId ?? null}
           focusNonce={focusNonce}
-          siteFrame={focusMode ? { right: 0, up: 0 } : desktop ? { right: -0.16, up: 0 } : { right: 0, up: 0.22 }}
+          siteFrame={{ right: 0, up: 0 }}
           guideSite={
             selected
               ? { latitude: selected.location.latitude, longitude: selected.location.longitude, attentive: true }
@@ -856,6 +856,10 @@ function Explorer({ planet }: { planet: PlanetId }) {
           }}
           onHear={() => narrateSite(selected)}
           narrationNote={narrationNote}
+          onOpen3D={() => {
+            soundscape.effect("ui");
+            setModelGalleryOpen(true);
+          }}
         />
       )}
       <div role="status" className={`absolute inset-0 z-[70] grid place-items-center bg-[#070d1c] transition-opacity duration-300 ${veil ? "opacity-100" : "pointer-events-none opacity-0"}`}>
