@@ -1,8 +1,10 @@
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
+import { LuBox } from "react-icons/lu";
 import { useEffect, useRef, useState } from "react";
 import { ArchiveIntro, markIntroSeen } from "../components/layout/ArchiveIntro";
 import { PlanetViewport, type SceneHandle } from "../components/planet/PlanetScene";
+import { LandingRelic } from "../components/relics/LandingRelic";
 import { TopBar } from "../components/layout/TopBar";
 import { useI18n } from "../features/localization/LanguageContext";
 import { usePrefersReducedMotion } from "../hooks/usePrefersReducedMotion";
@@ -88,11 +90,19 @@ export function LandingPage() {
               >
                 {t.enterMars}
               </Link>
+              <Link
+                to="/relics"
+                onClick={markIntroSeen}
+                className="min-h-11 inline-flex items-center justify-center gap-2 rounded-full px-3 py-3 text-xs sm:text-sm font-medium tracking-wider text-[#c5d2ea] uppercase transition hover:text-[#f4f7ff] lg:hidden"
+              >
+                <LuBox aria-hidden="true" /> {t.hallOfRelics}
+              </Link>
             </div>
             <p className="mt-4 text-xs text-[#93a6c9]">{t.dragHint}</p>
           </motion.div>
         </main>
       </div>
+      <LandingRelic reducedMotion={reduced} onEnter={markIntroSeen} />
       <ArchiveIntro />
       {sound.failed && <p className="pointer-events-none absolute right-4 bottom-4 z-30 max-w-xs text-xs text-[#c5d2ea]">{t.audioUnavailable}</p>}
     </div>

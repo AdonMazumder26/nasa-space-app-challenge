@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { LuBookOpen, LuBox, LuCompass, LuEye, LuList, LuMenu, LuMinus, LuPlay, LuPlus, LuRefreshCw, LuRotateCcw, LuX } from "react-icons/lu";
 import { ObjectList } from "../components/object/ObjectList";
-import { ModelGallery } from "../components/object/ModelGallery";
 import { StoryPanel } from "../components/object/StoryPanel";
 import { PlanetViewport, webglAvailable, type SceneHandle } from "../components/planet/PlanetScene";
 import { SearchBox } from "../components/search/SearchBox";
@@ -32,7 +31,7 @@ import {
   type SurfaceView,
 } from "../lib/exploration";
 import { catalogYearBounds, filterObjects, missionById } from "../lib/filtering";
-import { artifactModels } from "../data/artifactModels";
+import { modelsForObject } from "../data/artifactModels";
 import type { Artifact, Filters, PlanetId, TimelineEvent } from "../types/catalog";
 
 export function ExplorePage() {
@@ -71,8 +70,8 @@ function Explorer({ planet }: { planet: PlanetId }) {
   const [seeking, setSeeking] = useState(false);
   const [archiveFull, setArchiveFull] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
-  const [modelGalleryOpen, setModelGalleryOpen] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
+  const [reading, setReading] = useState(false);
   const [handoff, setHandoff] = useState<PlanetId | null>(null);
   const [live, setLive] = useState("");
   const [showOrient, setShowOrient] = useState(() => {
@@ -157,8 +156,8 @@ function Explorer({ planet }: { planet: PlanetId }) {
     [],
   );
 
-  const layer = useRef({ help: false, drawer: null as "list" | "timeline" | null, tour: false, panel: null as typeof panel, focus: false });
-  layer.current = { help: helpOpen, drawer, tour, panel, focus: focusMode };
+  const layer = useRef({ help: false, drawer: null as "list" | "timeline" | null, tour: false, panel: null as typeof panel, focus: false, reading: false });
+  layer.current = { help: helpOpen, drawer, tour, panel, focus: focusMode, reading };
   const selectRef = useRef<(object: Artifact, reveal?: boolean) => void>(() => undefined);
   const applyRef = useRef<(object: Artifact, reveal?: boolean) => void>(() => undefined);
   // setSearchParams changes identity with the query string, which would restart the tour on every hop.
@@ -177,6 +176,10 @@ function Explorer({ planet }: { planet: PlanetId }) {
         }
         if (layer.current.help) {
           setHelpOpen(false);
+          return;
+        }
+        if (layer.current.reading) {
+          setReading(false);
           return;
         }
         if (layer.current.tour) {
@@ -321,6 +324,7 @@ function Explorer({ planet }: { planet: PlanetId }) {
     if (performance.now() < ignoreEmptyUntil.current) return;
     setTour(false);
     setFlight("idle");
+    setReading(false);
     stopNarration();
     setNarrationNote(null);
     if (!selectedIdRef.current) return;
@@ -404,7 +408,8 @@ function Explorer({ planet }: { planet: PlanetId }) {
       return next;
     });
   }, [storyReady, selectedId]);
-  const showDock = desktop || !storyReady;
+  const immersed = reading && storyReady && desktop;
+  const showDock = (desktop || !storyReady) && !immersed;
   const nearby = useMemo(() => {
     if (!selected) return [];
     return catalog.objects
@@ -620,12 +625,12 @@ function Explorer({ planet }: { planet: PlanetId }) {
         />
       </div>
       <div
-        className={`pointer-events-none absolute inset-x-0 top-16 bottom-0 z-10 bg-[radial-gradient(circle_at_center,transparent_16%,rgba(0,0,0,0.58)_78%)] transition-opacity duration-700 ${storyReady ? "opacity-100" : "opacity-0"}`}
+        className={`pointer-events-none absolute inset-x-0 top-16 bottom-0 z-10 transition-opacity duration-700 ${immersed ? "bg-[#070d1c]/70 opacity-100" : storyReady ? "bg-[radial-gradient(circle_at_center,transparent_16%,rgba(0,0,0,0.58)_78%)] opacity-100" : "bg-[radial-gradient(circle_at_center,transparent_16%,rgba(0,0,0,0.58)_78%)] opacity-0"}`}
       />
       <TopBar
         planet={planet}
         onPlanet={switchPlanet}
-        dimmed={Boolean(selected || listVisible || timelineVisible || panel || modelGalleryOpen || toolsOpen || helpOpen)}
+        dimmed={Boolean(selected || listVisible || timelineVisible || panel || toolsOpen || helpOpen)}
         search={<SearchBox objects={catalog.objects} missions={catalog.missions} onSelect={(object) => selectObject(object)} />}
         onHelp={() => setHelpOpen(true)}
         onFullscreen={toggleFullscreen}
@@ -698,7 +703,7 @@ function Explorer({ planet }: { planet: PlanetId }) {
                 <IconTool label={t.explorerLog} pressed={panel === "log"} onClick={() => { soundscape.effect("ui"); setPanel((current) => (current === "log" ? null : "log")); }}>
                   <LuBookOpen aria-hidden="true" />
                 </IconTool>
-                <IconTool label={t.modelGallery} pressed={modelGalleryOpen} onClick={() => { soundscape.effect("ui"); setModelGalleryOpen(true); }}>
+                <IconTool label={t.hallOfRelics} onClick={() => { soundscape.effect("transition"); navigate("/relics"); }}>
                   <LuBox aria-hidden="true" />
                 </IconTool>
               </div>
@@ -756,7 +761,6 @@ function Explorer({ planet }: { planet: PlanetId }) {
           )}
         </div>
       )}
-      {modelGalleryOpen && !focusMode && <ModelGallery models={artifactModels} onClose={() => setModelGalleryOpen(false)} />}
       {(seeking || (selected && flight !== "idle")) && (
         <p className="pointer-events-none absolute bottom-24 left-1/2 z-30 -translate-x-1/2 text-[11px] tracking-[0.22em] text-[#f2a64a] uppercase">
           {seeking ? t.searchingArchive : flight === "locating" ? t.locatingSite : t.targetAcquired}
@@ -837,6 +841,13 @@ function Explorer({ planet }: { planet: PlanetId }) {
           onClose={closeStory}
           onPrevious={previous ? () => selectObject(previous, false) : null}
           onNext={next ? () => selectObject(next, false) : null}
+          previousName={previous?.name[lang] ?? null}
+          nextName={next?.name[lang] ?? null}
+          reading={reading}
+          onToggleReading={() => {
+            soundscape.effect("ui");
+            setReading((value) => !value);
+          }}
           nearby={nearby}
           onNearby={(id) => {
             const object = catalog.objects.find((item) => item.id === id);
@@ -856,9 +867,10 @@ function Explorer({ planet }: { planet: PlanetId }) {
           }}
           onHear={() => narrateSite(selected)}
           narrationNote={narrationNote}
-          onOpen3D={() => {
-            soundscape.effect("ui");
-            setModelGalleryOpen(true);
+          relics={modelsForObject(selected.id)}
+          onOpenRelic={(model) => {
+            soundscape.effect("transition");
+            navigate(`/relics?model=${model.id}&from=${selected.id}`);
           }}
         />
       )}

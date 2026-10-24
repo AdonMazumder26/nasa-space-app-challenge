@@ -106,13 +106,38 @@ export type RoverRoute = {
   points: RoverPoint[];
 };
 
+export type EventKind = "arrival" | "loss" | "found" | "retired" | "milestone";
+
 export type TimelineEvent = {
   id: string;
   objectId: string;
   missionId: string;
   date: string;
+  kind: EventKind;
   label: Localized;
   description: Localized;
+};
+
+export type Era = {
+  id: string;
+  from: number;
+  to: number;
+  name: Localized;
+  intro: Localized;
+};
+
+export type ThreadStop = {
+  objectId: string;
+  note: Localized;
+};
+
+export type StoryThread = {
+  id: string;
+  title: Localized;
+  tagline: Localized;
+  intro: Localized;
+  accent: "history" | "present" | "loss";
+  stops: ThreadStop[];
 };
 
 export type Filters = {

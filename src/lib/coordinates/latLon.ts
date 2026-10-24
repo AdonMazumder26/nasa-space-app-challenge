@@ -45,10 +45,18 @@ export function vectorToLatLon(x: number, y: number, z: number): { latitude: num
 }
 
 export function formatCoordinate(latitude: number, longitude: number): string {
-  const latHem = latitude >= 0 ? "N" : "S";
-  const lonHem = longitude >= 0 ? "E" : "W";
+  const parts = coordinateParts(latitude, longitude);
+  return `${parts.latitude}° ${parts.latHemisphere}, ${parts.longitude}° ${parts.lonHemisphere}`;
+}
+
+export function coordinateParts(latitude: number, longitude: number): { latitude: string; latHemisphere: "N" | "S"; longitude: string; lonHemisphere: "E" | "W" } {
   const digits = Math.max(Math.abs(latitude), Math.abs(longitude)) >= 100 ? 2 : 4;
-  return `${Math.abs(latitude).toFixed(digits)}° ${latHem}, ${Math.abs(longitude).toFixed(digits)}° ${lonHem}`;
+  return {
+    latitude: Math.abs(latitude).toFixed(digits),
+    latHemisphere: latitude >= 0 ? "N" : "S",
+    longitude: Math.abs(longitude).toFixed(digits),
+    lonHemisphere: longitude >= 0 ? "E" : "W",
+  };
 }
 
 export function yearOf(isoDate: string | undefined): number | null {

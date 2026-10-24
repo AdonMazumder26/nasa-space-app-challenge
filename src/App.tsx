@@ -4,6 +4,7 @@ import { LanguageProvider, useI18n } from "./features/localization/LanguageConte
 import { AboutPage } from "./routes/AboutPage";
 import { ExplorePage } from "./routes/ExplorePage";
 import { LandingPage } from "./routes/LandingPage";
+import { RelicsPage } from "./routes/RelicsPage";
 
 function DataGate() {
   const { t } = useI18n();
@@ -23,6 +24,7 @@ function DataGate() {
     <Routes>
       <Route path="/" element={<LandingPage />} />
       <Route path="/explore/:planet" element={<ExplorePage />} />
+      <Route path="/relics" element={<RelicsPage />} />
       <Route path="/about" element={<AboutPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

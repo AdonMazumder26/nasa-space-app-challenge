@@ -114,6 +114,7 @@ export function validateCatalog(input: {
     if (!objectIds.has(event.objectId)) issues.push(`${event.id} missing object ${event.objectId}`);
     if (!missionIds.has(event.missionId)) issues.push(`${event.id} missing mission ${event.missionId}`);
     if (!event.date || !event.label.en || !event.label.bn) issues.push(`${event.id} incomplete timeline fields`);
+    if (!["arrival", "loss", "found", "retired", "milestone"].includes(event.kind)) issues.push(`${event.id} unknown event kind ${String(event.kind)}`);
   }
 
   return issues;
