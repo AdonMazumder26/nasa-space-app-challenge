@@ -1,5 +1,4 @@
 import { OrbitControls, useProgress, useTexture, Html } from "@react-three/drei";
-import { GuideAstronaut } from "../astronaut/GuideAstronaut";
 import { StarField } from "./StarField";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Component, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -82,7 +81,6 @@ type SceneProps = {
   siteFrame?: { right: number; up: number };
   textureAttempt?: number;
   onTextureFail?: () => void;
-  guideSite?: { latitude: number; longitude: number; attentive?: boolean } | null;
 };
 
 class WebglBoundary extends Component<{ children: ReactNode; fallback: ReactNode }, { failed: boolean }> {
@@ -1961,13 +1959,6 @@ function SceneContents(props: SceneProps) {
           </Suspense>
         </TextureBoundary>
         {props.planet === "mars" && <MarsAir />}
-        {props.guideSite && (
-          <GuideAstronaut
-            latitude={props.guideSite.latitude}
-            longitude={props.guideSite.longitude}
-            reducedMotion={props.reducedMotion}
-          />
-        )}
         <MarkerLayer
           objects={props.objects}
           selectedId={props.selectedId}

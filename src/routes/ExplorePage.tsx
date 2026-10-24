@@ -575,11 +575,6 @@ function Explorer({ planet }: { planet: PlanetId }) {
           previewedId={timelinePreview?.objectId ?? null}
           focusNonce={focusNonce}
           siteFrame={{ right: 0, up: 0 }}
-          guideSite={
-            selected
-              ? { latitude: selected.location.latitude, longitude: selected.location.longitude, attentive: true }
-              : null
-          }
           emphasisNonce={emphasisNonce}
           intro={false}
           autoRotate={autoRotate && !holdSpin}
