@@ -1,8 +1,7 @@
-import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { LuBox } from "react-icons/lu";
 import { useEffect, useRef, useState } from "react";
 import { ArchiveIntro, markIntroSeen } from "../components/layout/ArchiveIntro";
+import { ExperienceModes } from "../components/landing/ExperienceModes";
 import { PlanetViewport, type SceneHandle } from "../components/planet/PlanetScene";
 import { LandingRelic } from "../components/relics/LandingRelic";
 import { TopBar } from "../components/layout/TopBar";
@@ -58,46 +57,25 @@ export function LandingPage() {
         <div className="pointer-events-auto">
           <TopBar sound={{ enabled: sound.enabled, failed: sound.failed, volume: sound.volume, onToggle: sound.toggle, onVolume: sound.setVolume }} />
         </div>
-        <main className="pointer-events-none flex flex-1 items-end px-5 pb-10 sm:px-10 sm:pb-16">
+        <main className="pointer-events-none flex flex-1 flex-col overflow-y-auto px-5 pb-8 sm:px-10 sm:pb-14">
           <motion.div
             initial={reduced ? false : { opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: reduced ? 0 : 0.7, delay: reduced ? 0 : 0.85 }}
-            className="max-w-xl"
+            className="mt-auto w-full max-w-2xl pt-4 max-sm:pointer-events-auto lg:max-w-[min(44rem,calc(100vw-26rem))]"
           >
-            <h1 className="font-display text-4xl sm:text-6xl md:text-7xl leading-[0.95] tracking-tight text-[#f4f7ff] uppercase">
+            <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl leading-[0.95] tracking-tight text-[#f4f7ff] uppercase">
               {BRAND.PROJECT_DISPLAY_NAME}
             </h1>
-            <p className="mt-4 text-base sm:text-lg text-[#f4f7ff] leading-snug">
+            <p className="mt-3 text-base sm:text-lg text-[#f4f7ff] leading-snug">
               {BRAND.PROJECT_SUBTITLE}
             </p>
-            <p className="mt-3 text-[10px] sm:text-[11px] font-mono tracking-[0.24em] text-[#f2a64a] uppercase">
+            <p className="mt-2 text-[10px] sm:text-[11px] font-mono tracking-[0.24em] text-[#f2a64a] uppercase">
               {BRAND.CHALLENGE_LABEL}
             </p>
-            <p className="mt-3 max-w-lg text-sm leading-6 text-[#c5d2ea]">{t.landingBody}</p>
-            <div className="pointer-events-auto mt-6 flex flex-wrap items-center gap-3">
-              <Link
-                to="/explore/moon"
-                onClick={markIntroSeen}
-                className="min-h-11 inline-flex items-center justify-center rounded-full bg-[#3d7eff] px-6 py-3 text-xs sm:text-sm font-medium tracking-wider text-[#f4f7ff] uppercase shadow-[0_0_24px_rgba(61,126,255,0.4)] transition hover:bg-[#528eff]"
-              >
-                {t.enterMoon}
-              </Link>
-              <Link
-                to="/explore/mars"
-                onClick={markIntroSeen}
-                className="min-h-11 inline-flex items-center justify-center rounded-full border border-[#f2a64a]/80 px-5 py-3 text-xs sm:text-sm font-medium tracking-wider text-[#f4f7ff] uppercase transition hover:bg-[#f2a64a]/15"
-              >
-                {t.enterMars}
-              </Link>
-              <Link
-                to="/relics"
-                onClick={markIntroSeen}
-                className="min-h-11 inline-flex items-center justify-center gap-2 rounded-full px-3 py-3 text-xs sm:text-sm font-medium tracking-wider text-[#c5d2ea] uppercase transition hover:text-[#f4f7ff] lg:hidden"
-              >
-                <LuBox aria-hidden="true" /> {t.hallOfRelics}
-              </Link>
-            </div>
+            <p className="mt-3 hidden max-w-lg text-sm leading-6 text-[#c5d2ea] sm:block">{t.landingBody}</p>
+            <p className="mt-5 font-mono text-[10px] tracking-[0.24em] text-[#93a6c9] uppercase sm:mt-6">{t.story.landingKicker}</p>
+            <ExperienceModes reducedMotion={reduced} onEnter={markIntroSeen} />
             <p className="mt-4 text-xs text-[#93a6c9]">{t.dragHint}</p>
           </motion.div>
         </main>

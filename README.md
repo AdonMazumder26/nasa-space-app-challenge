@@ -12,6 +12,11 @@
 
 **Beyond the Signal** is an interactive 3D historical atlas of human-made equipment left on the Moon and Mars. Instead of treating abandoned spacecraft, rovers, instruments, experiments, landers, and other hardware as isolated technical records, the experience connects each object to its geographic location, mission context, timeline, final communication or mission ending, present status, and documented evidence.
 
+The landing page offers two ways in:
+
+- **Explore Freely** — the interactive 3D atlas (`/explore/moon`, `/explore/mars`, `/relics`).
+- **Story Mode** — a scroll-driven, documentary-style journey through NASA's Moon and Mars missions (`/story`).
+
 Users can:
 
 - explore interactive 3D globes of the Moon and Mars
@@ -41,6 +46,18 @@ The challenge calls for innovative storytelling that brings to life the silent m
 - **3D Hardware Archive**: Interactive inspection of 3D models representing historical lunar and martian hardware.
 - **Guided Surface Expedition (ARIA)**: An interactive surface guide introducing catalogued artifacts and mission briefs.
 - **Composed Soundscape**: Optional ambient audio interpretation with full mute and volume controls.
+- **Story Mode**: A six-chapter cinematic documentary (The Beginning → The Moon → The Journey to Mars → The Red Planet → What Remains → The Legacy) with full-bleed mission photography, GSAP ScrollTrigger reveals, a reading-progress indicator, and "Explore this location" links back into the atlas. A Coming Soon resource archive closes the story.
+
+## Story Mode Architecture
+
+Story Mode never duplicates the mission database. `src/data/storyChapters.ts` is a presentation script: it lists chapters, sections, layouts, and short bilingual narrative framing, and references existing mission and artifact IDs. Everything factual — dates, coordinates, status, photographs, sources, 3D-scan associations — is resolved from `catalog.ts` and `artifactModels.ts` at render time by `src/lib/storyMode.ts`.
+
+- `validateStoryChapters()` fails loudly in development (console warning + on-page notice) and in `npm test` if a chapter references an unknown or non-NASA mission, an artifact that does not belong to its mission, a photograph that does not exist, or a hardware "remain" category that the catalog status does not support.
+- Status labels (Mission active / Mission ended / Contact lost / Status unconfirmed) are derived from the catalog's `ObjectStatus`; nothing is hand-labelled.
+- Animations live in `src/hooks/useStoryAnimations.ts`, keyed off `data-story-*` attributes, scoped with `gsap.context()` + `gsap.matchMedia()`, reverted on unmount, and skipped entirely under `prefers-reduced-motion`. Content is fully readable with animation disabled.
+- Pinned "assembly" scenes, the horizontal Mars strip, and the Moon/Mars finale only pin at ≥1024×700; smaller screens get the same content as a normal flowing layout.
+- Scene photography in `public/images/story/` comes from the [NASA Image and Video Library](https://images.nasa.gov) via `scripts/fetch-story-images.mjs`; `src/data/storyImages.ts` records each NASA ID, title, and credit, and every use links back to the original record. Run `node scripts/fetch-story-images.mjs` to refetch.
+- Story Mode is lazy-loaded, so GSAP is not part of the main bundle.
 
 ## NASA Data & Source Usage
 
@@ -69,7 +86,7 @@ Object coordinates, mission metadata, and historical records are derived from of
 - **3D Graphics**: Three.js, React Three Fiber, React Three Drei
 - **Routing**: React Router 7
 - **Styling**: Tailwind CSS
-- **Animation**: Framer Motion
+- **Animation**: Framer Motion (UI), GSAP + ScrollTrigger (Story Mode)
 - **Typography**: Fraunces, Outfit, Hind Siliguri
 - **Validation**: Zod
 - **Build Tooling & Testing**: Vite, Vitest
@@ -112,7 +129,7 @@ npm run dev
 
 Additional scripts:
 
-- `npm test`: Runs test suite validating coordinate calculations, catalog schema integrity, filters, and audio controllers.
+- `npm test`: Runs test suite validating coordinate calculations, catalog schema integrity, Story Mode chapter references, filters, and audio controllers.
 - `npm run build`: Typechecks with TypeScript (`tsc --noEmit`) and creates production build with Vite.
 - `npm run preview`: Previews the production build locally with offline Service Worker support.
 
