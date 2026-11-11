@@ -1,4 +1,4 @@
-const CACHE = "beyond-the-signal-v1";
+const CACHE = "beyond-the-signal-v2";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());

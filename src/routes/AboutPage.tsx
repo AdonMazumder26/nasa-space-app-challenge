@@ -4,6 +4,7 @@ import { TopBar } from "../components/layout/TopBar";
 import { Footer } from "../components/layout/Footer";
 import { BRAND } from "../constants/branding";
 import { catalog } from "../data/catalog";
+import { storyImages, storyImageUrl } from "../data/storyImages";
 import { useI18n } from "../features/localization/LanguageContext";
 import { usePageTitle } from "../hooks/usePageTitle";
 import { TEXTURE_LON_OFFSET_DEG } from "../lib/coordinates/latLon";
@@ -91,11 +92,24 @@ export function AboutPage() {
             </section>
           )}
 
+          <section id="story-photos" className="mt-8 border-t border-white/10 pt-6">
+            <h2 className="font-display text-2xl text-[#f4f7ff]">{t.aboutStoryTitle}</h2>
+            <p className="mt-2 text-sm leading-6 text-[#c5d2ea]">{t.aboutStoryBody}</p>
+            <ul className="mt-4 grid gap-2 sm:grid-cols-2">
+              {storyImages.map((image) => (
+                <li key={image.id} className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs">
+                  <a className="text-[#9ec0ff] underline" href={storyImageUrl(image)} target="_blank" rel="noreferrer noopener">
+                    {image.title}
+                  </a>
+                  <p className="mt-0.5 font-mono text-[10px] tracking-wide text-[#93a6c9]">{image.credit}</p>
+                </li>
+              ))}
+            </ul>
+          </section>
+
           <section id="sources" className="mt-8 border-t border-white/10 pt-6">
             <h2 className="font-display text-2xl text-[#f4f7ff]">{t.sourcesAndEvidence}</h2>
-            <p className="mt-2 text-xs text-[#93a6c9]">
-              Documented agency sources, coordinate catalogs, and observational records underpinning this atlas.
-            </p>
+            <p className="mt-2 text-xs text-[#93a6c9]">{t.sourcesIntro}</p>
             <ul className="mt-4 space-y-3">
               {factual.map((source) => (
                 <li key={source.id} className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm">
@@ -112,12 +126,17 @@ export function AboutPage() {
           </section>
 
           <p className="mt-8 text-sm text-[#93a6c9]">
-            {catalog.objects.length} {t.objects.toLowerCase()} · {catalog.missions.length} {t.mission.toLowerCase()} · {lang === "bn" ? "ইংরেজি ও বাংলা" : "English and Bangla"}
+            {catalog.objects.length} {t.objects.toLowerCase()} · {catalog.missions.length} {t.missions.toLowerCase()} · {lang === "bn" ? "ইংরেজি ও বাংলা" : "English and Bangla"}
           </p>
 
-          <Link to="/explore/moon" className="mt-6 inline-block rounded-full bg-[#3d7eff] px-6 py-3 text-sm font-medium tracking-wide uppercase text-[#f4f7ff] shadow-[0_0_20px_rgba(61,126,255,0.4)] hover:bg-[#528eff] transition">
-            {t.exploreArchive}
-          </Link>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Link to="/explore/moon" className="inline-block rounded-full bg-[#3d7eff] px-6 py-3 text-sm font-medium tracking-wide uppercase text-[#f4f7ff] shadow-[0_0_20px_rgba(61,126,255,0.4)] hover:bg-[#528eff] transition">
+              {t.exploreArchive}
+            </Link>
+            <Link to="/story" className="inline-block rounded-full border border-[#f2a64a]/70 px-6 py-3 text-sm font-medium tracking-wide uppercase text-[#f4f7ff] hover:bg-[#f2a64a]/15 transition">
+              {t.aboutStoryCta}
+            </Link>
+          </div>
         </main>
       </div>
       <Footer />

@@ -59,6 +59,39 @@ export function Footer() {
                     {t.timeline}
                   </Link>
                 </li>
+                <li>
+                  <Link to="/relics" className="transition hover:text-[#f4f7ff]">
+                    {t.hallOfRelics}
+                  </Link>
+                </li>
+              </ul>
+            </div>
+
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-widest text-[#f4f7ff]">
+                {t.story.title}
+              </h3>
+              <ul className="mt-3 space-y-2 text-xs">
+                <li>
+                  <Link to="/story" className="transition hover:text-[#f4f7ff]">
+                    {t.story.twoWorlds.title}
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/story/moon" className="transition hover:text-[#f4f7ff]">
+                    {t.moon}
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/story/mars" className="transition hover:text-[#f4f7ff]">
+                    {t.mars}
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/story/chronicle" className="transition hover:text-[#f4f7ff]">
+                    {t.story.twoWorlds.chronicleCta}
+                  </Link>
+                </li>
               </ul>
             </div>
 

@@ -106,6 +106,9 @@ export function StoryExperience({ story }: Props) {
       </div>
 
       <main ref={rootRef} className="ps-stage" data-mode={mode} aria-label={`${story.label[lang]} · ${story.title[lang]}`}>
+        <h1 className="sr-only">
+          {story.label[lang]} · {story.title[lang]}
+        </h1>
         <div ref={trackRef} className="ps-track">
           {story.panels.map((panel, index) => (
             <StoryPanel key={panel.id} story={story} panel={panel} index={index} total={total} near={Math.abs(index - active) <= 1} mode={mode} reducedMotion={reduced} />

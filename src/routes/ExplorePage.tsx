@@ -53,7 +53,11 @@ function Explorer({ planet }: { planet: PlanetId }) {
   const bounds = useMemo(() => catalogYearBounds(catalog.missions), []);
   const [filters, setFilters] = useState<Filters>({ types: [], statuses: [], missionId: null, throughYear: bounds.max });
   const [autoRotate, setAutoRotate] = useState(!reduced);
-  const [drawer, setDrawer] = useState<"list" | "timeline" | null>(null);
+  // Footer and deep links can open a drawer directly with ?view=objects or ?view=timeline.
+  const [drawer, setDrawer] = useState<"list" | "timeline" | null>(() => {
+    const view = searchParams.get("view");
+    return view === "objects" ? "list" : view === "timeline" ? "timeline" : null;
+  });
   const [timelinePreview, setTimelinePreview] = useState<TimelineEvent | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [focusNonce, setFocusNonce] = useState(0);
@@ -232,7 +236,7 @@ function Explorer({ planet }: { planet: PlanetId }) {
 
   const exploreTitle = useMemo(() => {
     if (drawer === "timeline") {
-      return "Timeline";
+      return t.timeline;
     }
     if (selected) {
       if (missionFocus === selected.missionId) {
@@ -241,8 +245,8 @@ function Explorer({ planet }: { planet: PlanetId }) {
       }
       return selected.name[lang];
     }
-    return "Explore the Moon & Mars";
-  }, [drawer, selected, missionFocus, lang]);
+    return t.exploreTitle;
+  }, [drawer, selected, missionFocus, lang, t]);
 
   usePageTitle(exploreTitle);
   const markers = [...filtered];
@@ -567,6 +571,9 @@ function Explorer({ planet }: { planet: PlanetId }) {
 
   return (
     <div className="relative h-dvh overflow-hidden">
+      <h1 className="sr-only">
+        {t.exploreTitle} · {t[planet]}
+      </h1>
       <div className="absolute inset-0">
         <PlanetViewport
           planet={planet}
